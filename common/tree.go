@@ -1,5 +1,6 @@
 package common
 
+// ObjectTree 通用的对象树
 type ObjectTree struct {
 	Id         int64         `json:"id"`          // Id
 	ParentId   int64         `json:"parentId"`    // 父级 ID
@@ -10,6 +11,7 @@ type ObjectTree struct {
 	Entry      []*ObjectTree `json:"entry"`       // 子项目
 }
 
+// NewObjectTrees 解析为树形结构
 func NewObjectTrees(entries ...*ObjectTree) []*ObjectTree {
 
 	if len(entries) == 0 {
@@ -29,20 +31,15 @@ func NewObjectTrees(entries ...*ObjectTree) []*ObjectTree {
 		_, parentNode := objectMap[obj.ParentId]
 		if !parentNode {
 			rootNodes = append(rootNodes, obj)
-			delete(objectMap, obj.Id)
 		}
 	}
 
 	// 在 subNodes 中找出 node 的直接子节点
 	var fn func(*ObjectTree, map[int64]*ObjectTree)
 	fn = func(node *ObjectTree, subNodes map[int64]*ObjectTree) {
-		if len(subNodes) == 0 {
-			return
-		}
 		for _, obj := range subNodes {
 			if obj.ParentId == node.Id {
 				node.Entry = append(node.Entry, obj)
-				delete(subNodes, obj.Id)
 			}
 		}
 		if len(node.Entry) > 0 {
@@ -54,10 +51,8 @@ func NewObjectTrees(entries ...*ObjectTree) []*ObjectTree {
 	}
 
 	// 存在子节点，组装完整的树结构
-	if len(objectMap) > 0 {
-		for _, obj := range rootNodes {
-			fn(obj, objectMap)
-		}
+	for _, obj := range rootNodes {
+		fn(obj, objectMap)
 	}
 	return rootNodes
 }

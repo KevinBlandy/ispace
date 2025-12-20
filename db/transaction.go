@@ -58,8 +58,8 @@ func TransactionWithoutResult(ctx context.Context, f func(ctx context.Context) e
 	return
 }
 
-// Tx 获取当前上下文中的事务
-func Tx(ctx context.Context) (*gorm.DB, error) {
+// Session 获取当前上下文中的事务
+func Session(ctx context.Context) (*gorm.DB, error) {
 	val := ctx.Value(ctxKeySession)
 	if val == nil {
 		return nil, ErrNoTransaction

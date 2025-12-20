@@ -4,6 +4,7 @@ type App struct {
 	Server     *Server     `yaml:"server"`
 	Log        *Log        `yaml:"log"`
 	DataSource *DataSource `yaml:"datasource"`
+	Redis      *Redis      `yaml:"redis"`
 }
 
 var app *App
