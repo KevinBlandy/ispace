@@ -12,6 +12,7 @@ var (
 // User 管理员
 type User struct {
 	Id         int64    `gorm:"primaryKey;autoIncrement"`
+	Avatar     string   // 头像
 	Account    string   // 账户
 	Password   string   // 密码
 	Email      string   // 邮箱
