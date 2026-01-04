@@ -1,10 +1,12 @@
 package common
 
-import "ispace/common/response"
+import (
+	"ispace/common/response"
+)
 
 type ServiceError interface {
-	StatusCode() int              // Http 状态码
-	Response() *response.Response // 响应
+	StatusCode() int              // 业务的 Http 状态码
+	Response() *response.Response // 业务的响应数据
 }
 
 type defaultServiceError struct {
@@ -23,6 +25,11 @@ func (d defaultServiceError) Response() *response.Response {
 }
 
 func NewServiceError(statusCode int, response *response.Response) ServiceError {
+
+	//statusTxt := http.StatusText(statusCode)
+	//if statusTxt == "" {
+	//	statusCode = http.StatusInternalServerError
+	//}
 	return &defaultServiceError{
 		statusCode: statusCode,
 		response:   response,

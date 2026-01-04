@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/json"
 	"errors"
 	"ispace/common"
 	"ispace/common/response"
@@ -21,7 +22,7 @@ func H(fn func(*gin.Context) (any, error)) gin.HandlerFunc {
 		if err != nil {
 			errorHandle(err, c)
 		} else if result != nil {
-
+			resultHandle(result, c)
 		}
 		c.Next()
 	}
@@ -36,26 +37,45 @@ func resultHandle(resp any, ctx *gin.Context) {
 	case *response.Response:
 		ctx.JSON(http.StatusOK, r)
 	default:
+		ctx.Status(http.StatusNoContent)
 		slog.Warn("[handler] 未定义的 Handler 返回类型", slog.String("type", reflect.TypeOf(resp).Name()))
 	}
 }
 
 func errorHandle(err error, ctx *gin.Context) {
 
+	// 最终都需要转换为业务异常
 	var serviceError common.ServiceError
 
-	if !errors.As(err, &serviceError) {
-		// 非业务异常
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			serviceError = common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("数据不存在"))
-		} else if errors.Is(err, os.ErrNotExist) {
-			serviceError = common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("文件不存在"))
-		} else {
-			serviceError = common.NewServiceError(http.StatusInternalServerError, response.Fail(response.CodeNotFound).WithMessage("服务器异常"))
+	switch {
+	case errors.As(err, &serviceError):
+	case os.IsNotExist(err), errors.Is(err, gorm.ErrRecordNotFound):
+		serviceError = common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("数据不存在："+err.Error()))
+	case os.IsPermission(err):
+		serviceError = common.NewServiceError(http.StatusForbidden, response.Fail(response.CodeForbidden).WithMessage("无权操作："+err.Error()))
+	default:
+		// 默认服务器异常
+		slog.Error("[handler] 服务器异常",
+			slog.String("err", err.Error()),
+		)
+		serviceError = common.NewServiceError(
+			http.StatusInternalServerError,
+			response.Fail(response.CodeNotFound).WithMessage("服务器异常："+err.Error()),
+		)
+	}
+
+	ctx.Status(serviceError.StatusCode())
+
+	responseBody := serviceError.Response()
+	if responseBody != nil {
+		ctx.Header("Content-Type", "application/json; charset=utf-8")
+
+		encoder := json.NewEncoder(ctx.Writer)
+		//encoder.SetIndent("", "  ")
+		//encoder.SetEscapeHTML(false)
+
+		if err := encoder.Encode(responseBody); err != nil {
+			slog.Error("[handler] JSON 响应异常", slog.String("err", err.Error()))
 		}
 	}
-	ctx.JSON(
-		serviceError.StatusCode(),
-		serviceError.Response(),
-	)
 }

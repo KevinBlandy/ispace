@@ -50,6 +50,8 @@ var (
 	CodeBadRequest Code = "BAD_REQUEST"
 	// CodeNotFound 没找到
 	CodeNotFound Code = "NOT_FOUND"
+	// CodeForbidden 无权操作
+	CodeForbidden Code = "FORBIDDEN"
 	// CodeServerError 服务器异常
 	CodeServerError Code = "SERVER_ERROR"
 )
