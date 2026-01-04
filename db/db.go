@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"gorm.io/driver/mysql"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -16,11 +16,9 @@ import (
 var db *gorm.DB
 
 // Initialization 初始化数据源
-func Initialization(config *config.DataSource) (err error) {
+func Initialization() (err error) {
 
-	slog.Info("[db] 数据源初始化")
-
-	db, err = gorm.Open(mysql.Open(config.Url), &gorm.Config{
+	db, err = gorm.Open(sqlite.Open(*config.DB), &gorm.Config{
 		Logger: logger.NewSlogLogger(slog.Default(), logger.Config{
 			SlowThreshold:             time.Second * 2,
 			Colorful:                  false,
@@ -37,10 +35,10 @@ func Initialization(config *config.DataSource) (err error) {
 	if err != nil {
 		return err
 	}
-	database.SetMaxIdleConns(config.Pool.MaxIdleConn)
-	database.SetMaxOpenConns(config.Pool.MaxOpenConn)
-	database.SetConnMaxIdleTime(config.Pool.MaxIdleTime)
-	database.SetConnMaxLifetime(config.Pool.MaxLifetime)
+	//database.SetMaxIdleConns(config.Pool.MaxIdleConn)
+	//database.SetMaxOpenConns(config.Pool.MaxOpenConn)
+	//database.SetConnMaxIdleTime(config.Pool.MaxIdleTime)
+	//database.SetConnMaxLifetime(config.Pool.MaxLifetime)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -61,4 +59,12 @@ func Stats() sql.DBStats {
 
 func Get() *gorm.DB {
 	return db
+}
+
+func Close() error {
+	rawDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	return rawDB.Close()
 }
