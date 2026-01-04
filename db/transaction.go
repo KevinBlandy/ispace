@@ -12,7 +12,7 @@ var (
 	ctxKeySession = "__db_session__"
 )
 
-var ErrNoTransaction = errors.New("no transaction found")
+//var ErrNoTransaction = errors.New("no transaction found")
 
 // TxReadOnly 只读事务
 var TxReadOnly = &sql.TxOptions{
@@ -59,14 +59,14 @@ func TransactionWithoutResult(ctx context.Context, f func(ctx context.Context) e
 }
 
 // Session 获取当前上下文中的事务
-func Session(ctx context.Context) (*gorm.DB, error) {
+func Session(ctx context.Context) *gorm.DB {
 	val := ctx.Value(ctxKeySession)
 	if val == nil {
-		return nil, ErrNoTransaction
+		panic("no session found")
 	}
 	session, ok := val.(*gorm.DB)
 	if !ok {
-		return nil, ErrNoTransaction
+		panic("invalid session found")
 	}
-	return session, nil
+	return session
 }
