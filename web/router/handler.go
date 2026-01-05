@@ -3,6 +3,7 @@ package router
 import (
 	"encoding/json"
 	"errors"
+	"ispace/auth"
 	"ispace/common"
 	"ispace/common/response"
 	"log/slog"
@@ -18,12 +19,19 @@ import (
 // H 通用的处理器
 func H(fn func(*gin.Context) (any, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
+
 		result, err := fn(c)
+
 		if err != nil {
 			errorHandle(err, c)
-		} else if result != nil {
+			c.Abort()
+			return
+		}
+
+		if result != nil {
 			resultHandle(result, c)
 		}
+
 		c.Next()
 	}
 }
@@ -50,9 +58,11 @@ func errorHandle(err error, ctx *gin.Context) {
 	switch {
 	case errors.As(err, &serviceError):
 	case os.IsNotExist(err), errors.Is(err, gorm.ErrRecordNotFound):
-		serviceError = common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("数据不存在："+err.Error()))
+		serviceError = common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("数据不存在"))
 	case os.IsPermission(err):
-		serviceError = common.NewServiceError(http.StatusForbidden, response.Fail(response.CodeForbidden).WithMessage("无权操作："+err.Error()))
+		serviceError = common.NewServiceError(http.StatusForbidden, response.Fail(response.CodeForbidden).WithMessage("无权操作"))
+	case errors.Is(err, auth.ErrBadToken):
+		serviceError = common.NewServiceError(http.StatusUnauthorized, response.Fail(response.CodeUnauthorized).WithMessage("请先登录"))
 	default:
 		// 默认服务器异常
 		slog.Error("[handler] 服务器异常",
@@ -60,7 +70,7 @@ func errorHandle(err error, ctx *gin.Context) {
 		)
 		serviceError = common.NewServiceError(
 			http.StatusInternalServerError,
-			response.Fail(response.CodeNotFound).WithMessage("服务器异常："+err.Error()),
+			response.Fail(response.CodeServerError).WithMessage("服务器异常："+err.Error()),
 		)
 	}
 

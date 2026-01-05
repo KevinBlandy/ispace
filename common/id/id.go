@@ -2,6 +2,7 @@ package id
 
 import (
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,6 +11,8 @@ import (
 )
 
 var snowflakeNode *snowflake.Node
+
+var atomicId = &atomic.Uint64{}
 
 func init() {
 
@@ -28,6 +31,11 @@ func init() {
 // Next 生成下一个雪花ID
 func Next() snowflake.ID {
 	return snowflakeNode.Generate()
+}
+
+// Increment 全局递增 ID，从 0 开始
+func Increment() uint64 {
+	return atomicId.Add(1)
 }
 
 // UUID 生成无符号的 UUID

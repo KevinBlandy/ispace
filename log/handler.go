@@ -3,6 +3,7 @@ package log
 import (
 	"context"
 	"errors"
+	"ispace/common/constant"
 	"log/slog"
 )
 
@@ -26,6 +27,18 @@ func (c *appLogHandler) Enabled(_ context.Context, level slog.Level) bool {
 func (c *appLogHandler) Handle(ctx context.Context, record slog.Record) error {
 
 	var errSlice []error
+
+	// 请求 id
+	requestId := ctx.Value(constant.CtxKeyRequestId)
+	if requestId != nil {
+		record.AddAttrs(slog.Any("request", requestId))
+	}
+
+	// logger 名称
+	loggerName := ctx.Value(constant.CtxKeyLoggerName)
+	if loggerName != nil {
+		record.AddAttrs(slog.Any("logger", loggerName))
+	}
 
 	for _, v := range c.handlers {
 		if err := v.Handle(ctx, record); err != nil {

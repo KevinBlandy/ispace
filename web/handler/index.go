@@ -1,3 +1,4 @@
 package handler
 
-type IndexHandler struct{}
+type IndexHandler struct {
+}

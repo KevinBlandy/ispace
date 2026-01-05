@@ -24,11 +24,20 @@ func (r *Response) WithData(data any) *Response {
 	return r
 }
 
+func New(code Code, success bool, message string, data any) *Response {
+	return &Response{
+		Code:    code,
+		Success: success,
+		Message: message,
+		Data:    data,
+	}
+}
+
 func Ok(data any) *Response {
 	return &Response{
 		Code:    CodeOk,
 		Data:    data,
-		Message: "success",
+		Message: string(CodeOk),
 		Success: true,
 	}
 }
@@ -36,6 +45,7 @@ func Ok(data any) *Response {
 func Fail(code Code) *Response {
 	return &Response{
 		Code:    code,
+		Message: string(code),
 		Success: false,
 	}
 }
@@ -50,22 +60,12 @@ var (
 	CodeBadRequest Code = "BAD_REQUEST"
 	// CodeNotFound 没找到
 	CodeNotFound Code = "NOT_FOUND"
+	// CodeCaptchaFailed 验证码错误
+	CodeCaptchaFailed Code = "CAPTCHA_FAILED"
+	// CodeUnauthorized 未登录
+	CodeUnauthorized Code = "UNAUTHORIZED"
 	// CodeForbidden 无权操作
 	CodeForbidden Code = "FORBIDDEN"
 	// CodeServerError 服务器异常
 	CodeServerError Code = "SERVER_ERROR"
 )
-
-// HttpStatus 获取业务状态码对应的 HTTP 状态码
-//func (r Code) HttpStatus() int {
-//	switch r {
-//	case CodeBadRequest:
-//		return http.StatusBadRequest
-//	case CodeNotFound:
-//		return http.StatusNotFound
-//	case CodeServerError:
-//		return http.StatusInternalServerError
-//	default:
-//		return http.StatusOK // 默认 OK
-//	}
-//}

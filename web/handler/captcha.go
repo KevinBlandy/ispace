@@ -1,7 +1,13 @@
 package handler
 
 import (
+	"context"
+	"ispace/common"
+	"ispace/common/constant"
 	"ispace/common/id"
+	"ispace/common/response"
+	"log/slog"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/steambap/captcha"
@@ -13,7 +19,7 @@ type Captcha struct {
 	CaptchaQuery    string // 验证码的请求参数名称
 }
 
-func (c *Captcha) ServeHTTP(ctx *gin.Context) error {
+func (c *Captcha) Serve(ctx *gin.Context) {
 
 	// 生成验证码图片
 	image, err := captcha.New(150, 50, func(options *captcha.Options) {
@@ -21,7 +27,14 @@ func (c *Captcha) ServeHTTP(ctx *gin.Context) error {
 		options.CurveNumber = 4 // 干扰线数量
 	})
 	if err != nil {
-		return err
+
+		slog.ErrorContext(context.WithValue(ctx.Request.Context(), constant.CtxKeyLoggerName, "captcha"),
+			"验证码生成异常",
+			slog.String("err", err.Error()),
+		)
+
+		http.Error(ctx.Writer, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	// id & 文本
@@ -42,16 +55,27 @@ func (c *Captcha) ServeHTTP(ctx *gin.Context) error {
 	//	Quantizer: nil, //palette.Plan9被用来代替nil Quantizer，它被用来生成一个具有NumColors大小的调色板。
 	//	Drawer:    nil, // draw.FloydSteinberg用于将源图像转换为所需的调色板。Draw.FloydSteinberg用于替代一个无的Drawer。
 	//})
-	return image.WriteImage(ctx.Writer)
+	if err := image.WriteImage(ctx.Writer); err != nil {
+		slog.ErrorContext(
+			context.WithValue(ctx.Request.Context(), constant.CtxKeyLoggerName, "captcha"),
+			"验证码响应异常",
+			slog.String("err", err.Error()),
+		)
+	}
 }
 
-func Validate(ctx *gin.Context) error {
-	//
-	return nil
+func (c *Captcha) Validate(ctx *gin.Context) (any, error) {
+	captchaId := ctx.Query(c.CaptchaIdQuery)
+	captchaText := ctx.Query(c.CaptchaQuery)
+	if captchaId == "" || captchaText == "" {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeCaptchaFailed).WithMessage("验证码错误"))
+	}
+	// TODO 校验
+	return nil, nil
 }
 
 var DefaultCaptcha = &Captcha{
-	CaptchaIdHeader: "X-Captcha-Id",
+	CaptchaIdHeader: constant.HttpHeaderCaptchaId,
 	CaptchaIdQuery:  "captchaId",
 	CaptchaQuery:    "captcha",
 }

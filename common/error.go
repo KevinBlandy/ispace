@@ -7,6 +7,7 @@ import (
 type ServiceError interface {
 	StatusCode() int              // 业务的 Http 状态码
 	Response() *response.Response // 业务的响应数据
+	error
 }
 
 type defaultServiceError struct {
