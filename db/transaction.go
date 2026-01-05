@@ -40,10 +40,10 @@ func Transaction[T any](ctx context.Context, f func(ctx context.Context) (T, err
 				err = errors.Join(err, rollBackErr)
 			}
 			return
-		} else {
-			// 提交事务
-			err = tx.Commit().Error
 		}
+
+		// 提交事务
+		err = tx.Commit().Error
 	}()
 
 	result, err = f(context.WithValue(ctx, ctxKeySession, tx))
