@@ -50,8 +50,8 @@ func Transaction[T any](ctx context.Context, f func(ctx context.Context) (T, err
 	return
 }
 
-// TransactionWithoutResult 开启事务
-func TransactionWithoutResult(ctx context.Context, f func(ctx context.Context) error, options ...*sql.TxOptions) (err error) {
+// TransactionWithOutResult 开启事务
+func TransactionWithOutResult(ctx context.Context, f func(ctx context.Context) error, options ...*sql.TxOptions) (err error) {
 	_, err = Transaction[any](ctx, func(ctx context.Context) (any, error) {
 		return nil, f(ctx)
 	}, options...)

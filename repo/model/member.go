@@ -2,9 +2,9 @@ package model
 
 // Member 会员
 type Member struct {
-	Id         int64  `gorm:"primaryKey;autoIncrement"`
+	Id         int64  `gorm:"primaryKey"`
 	Avatar     string // 头像
-	Account    string // 账户
+	Account    string `gorm:"uniqueIndex"` // 账户
 	Password   string // 密码
 	Email      string // 邮箱
 	Enabled    bool   // 是否启用账户

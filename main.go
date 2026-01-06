@@ -8,6 +8,7 @@ import (
 	"ispace/db"
 	"ispace/log"
 	"ispace/rdb"
+	"ispace/repo"
 	"ispace/web/server"
 	"log/slog"
 	"net/http"
@@ -28,16 +29,25 @@ func main() {
 	shutdown := log.Initialization()
 	defer shutdown()
 
+	// ===================================
+	// 系统资源初始化
+	// ===================================
 	if err := db.Initialization(); err != nil {
 		slog.Error("数据源初始化异常", slog.String("error", err.Error()))
 		return
 	}
-
+	if err := repo.Initialization(); err != nil {
+		slog.ErrorContext(context.Background(), "数据表初始化异常", slog.String("error", err.Error()))
+		return
+	}
 	if err := rdb.Initialization(); err != nil {
 		slog.ErrorContext(context.Background(), "Redis 初始化异常", slog.String("error", err.Error()))
 		return
 	}
 
+	// ===================================
+	// HTTP 服务
+	// ===================================
 	httpServer := server.New()
 
 	go func() {
