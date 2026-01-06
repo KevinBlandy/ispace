@@ -59,12 +59,12 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	// 查询 Hash 是否存在
 	objectId, err := db.Transaction(ctx, func(ctx context.Context) (int64, error) {
 		var id int64
-		return id, db.Session(ctx).Table(model.Object{}.TableName()).Select("id").Where("sha256 = ?", hash).Scan(&id).Error
+		return id, db.Session(ctx).Table(model.Object{}.TableName()).Select("id").Where("hash = ?", hash).Scan(&id).Error
 	})
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if objectId > 0 {
 		// 已存在了文件，复制引用即可
 		return s.NewObjectRef(ctx, memberId, parentId, objectId, fileHeader.Filename)
 	}
@@ -93,8 +93,7 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	var compress = fileHeader.Size > compressionThreshold
 	if compress {
 		var err error
-		reader, err = gzip.NewReader(reader)
-		if err != nil {
+		if reader, err = gzip.NewReader(reader); err != nil {
 			return err
 		}
 		defer util.SafeClose(reader)
