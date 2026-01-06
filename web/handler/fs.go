@@ -53,9 +53,7 @@ var NewFsHandler = func(fs ...http.FileSystem) gin.HandlerFunc {
 			http.Error(c.Writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		defer func() {
-			_ = file.Close()
-		}()
+		defer util.SafeClose(file)
 
 		// 获取文件信息
 		fileStat, err := file.Stat()
@@ -70,8 +68,11 @@ var NewFsHandler = func(fs ...http.FileSystem) gin.HandlerFunc {
 
 		// 目录的话，尝试加载下面的index.html
 		if fileStat.IsDir() {
+
 			indexFilePath := strings.TrimSuffix(filePath, "/") + "/index.html"
+
 			indexFile, err := f.Open(indexFilePath)
+
 			if err != nil {
 				// index.html 读取异常
 				if os.IsNotExist(err) {
@@ -81,10 +82,10 @@ var NewFsHandler = func(fs ...http.FileSystem) gin.HandlerFunc {
 				http.Error(c.Writer, err.Error(), http.StatusInternalServerError)
 				return
 			}
+
 			// 有index.html文件
-			defer func() {
-				_ = indexFile.Close()
-			}()
+			defer util.SafeClose(indexFile)
+
 			indexFileStat, err := indexFile.Stat()
 			if err != nil {
 				if os.IsNotExist(err) {
@@ -94,16 +95,21 @@ var NewFsHandler = func(fs ...http.FileSystem) gin.HandlerFunc {
 				http.Error(c.Writer, err.Error(), http.StatusInternalServerError)
 				return
 			}
+
 			filePath = indexFilePath
 			fileStat = indexFileStat
 			file = indexFile
 		}
+
 		http.ServeContent(c.Writer, c.Request, fileStat.Name(), fileStat.ModTime(), file)
+
+		// 中断调用链
+		c.Abort()
 	}
 }
 
 var DefaultFsHandler = NewFsHandler(
-	http.Dir(*config.PublicDir), // 指定的公共目录
+	http.Dir(*config.PublicDir), // 指定的公共目录优先级最高
 	http.FS(util.Require(func() (fs.FS, error) {
 		return fs.Sub(web.Resource, "resource/public")
 	})),

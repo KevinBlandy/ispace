@@ -7,12 +7,15 @@ import (
 	"ispace/common/constant"
 	"ispace/db"
 	"ispace/log"
+	"ispace/rdb"
 	"ispace/web/server"
 	"log/slog"
 	"net/http"
 	"os/signal"
 	"runtime"
 	"syscall"
+
+	_ "ispace/config"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,6 +30,11 @@ func main() {
 
 	if err := db.Initialization(); err != nil {
 		slog.Error("数据源初始化异常", slog.String("error", err.Error()))
+		return
+	}
+
+	if err := rdb.Initialization(); err != nil {
+		slog.ErrorContext(context.Background(), "Redis 初始化异常", slog.String("error", err.Error()))
 		return
 	}
 
@@ -57,6 +65,7 @@ func main() {
 	}
 
 	_ = db.Close()
+	_ = rdb.Close()
 
 	slog.Info("服务已停止")
 }

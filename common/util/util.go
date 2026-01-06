@@ -1,5 +1,7 @@
 package util
 
+import "io"
+
 func Require[T any](fn func() (T, error)) T {
 	ret, err := fn()
 	if err != nil {
@@ -13,4 +15,8 @@ func If[T any](condition bool, trueVal, falseVal T) T {
 		return trueVal
 	}
 	return falseVal
+}
+
+func SafeClose(closer io.Closer) {
+	_ = closer.Close()
 }
