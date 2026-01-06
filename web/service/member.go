@@ -24,7 +24,10 @@ func NewMemberService() *MemberService {
 // Login 登录
 func (m MemberService) Login(ctx context.Context, request *web.SignInApiRequest) (*model.Member, error) {
 
-	member, err := gorm.G[*model.Member](db.Session(ctx)).Where("account = ?", request.Account).Take(ctx)
+	member, err := gorm.G[*model.Member](db.Session(ctx)).
+		Select("id", "password", "enabled").
+		Where("account = ?", request.Account).
+		Take(ctx)
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -39,6 +42,11 @@ func (m MemberService) Login(ctx context.Context, request *web.SignInApiRequest)
 		}
 		return nil, err
 	}
+
+	if !member.Enabled {
+		return nil, common.NewServiceError(http.StatusForbidden, response.Fail(response.CodeForbidden).WithMessage("账户被封禁"))
+	}
+
 	return member, nil
 }
 

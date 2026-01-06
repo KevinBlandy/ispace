@@ -1,6 +1,10 @@
 package router
 
 import (
+	"io/fs"
+	"ispace/common/util"
+	"ispace/config"
+	"ispace/web"
 	"ispace/web/filter"
 	"ispace/web/handler"
 	"ispace/web/handler/api"
@@ -27,11 +31,16 @@ func New() http.Handler {
 
 	// 登录
 	router.POST("/api/sign-in",
-		H(handler.DefaultCaptcha().Validate),
+		// H(handler.DefaultCaptcha().Validate),
 		H(api.NewSignInApi().Serve),
 	)
 
 	// 静态资源在最后
-	router.Use(handler.DefaultFsHandler)
+	router.Use(handler.NewFsHandler(
+		http.Dir(*config.PublicDir), // 指定的公共目录优先级最高
+		http.FS(util.Require(func() (fs.FS, error) {
+			return fs.Sub(web.Resource, "resource/public")
+		})),
+	))
 	return router
 }

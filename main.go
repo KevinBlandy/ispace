@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"ispace/common/constant"
+	"ispace/config"
 	"ispace/db"
 	"ispace/log"
 	"ispace/rdb"
@@ -12,6 +12,7 @@ import (
 	"ispace/web/server"
 	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
@@ -21,10 +22,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func main() {
-
-	flag.Parse()
+func init() {
+	_ = config.Initialization(os.Args[1:])
 	gin.SetMode(gin.ReleaseMode)
+}
+
+func main() {
 
 	shutdown := log.Initialization()
 	defer shutdown()

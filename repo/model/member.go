@@ -6,7 +6,7 @@ type Member struct {
 	Avatar     string // 头像
 	Account    string `gorm:"uniqueIndex"` // 账户
 	Password   string // 密码
-	Email      string // 邮箱
+	Email      string `gorm:"uniqueIndex"` // 邮箱
 	Enabled    bool   // 是否启用账户
 	CreateTime int64  // 创建时间
 	UpdateTime int64  // 更新时间

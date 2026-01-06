@@ -1,10 +1,7 @@
 package handler
 
 import (
-	"io/fs"
 	"ispace/common/util"
-	"ispace/config"
-	"ispace/web"
 	"net/http"
 	"os"
 	"path"
@@ -69,9 +66,7 @@ var NewFsHandler = func(fs ...http.FileSystem) gin.HandlerFunc {
 		// 目录的话，尝试加载下面的index.html
 		if fileStat.IsDir() {
 
-			indexFilePath := strings.TrimSuffix(filePath, "/") + "/index.html"
-
-			indexFile, err := f.Open(indexFilePath)
+			indexFile, err := f.Open(strings.TrimSuffix(filePath, "/") + "/index.html")
 
 			if err != nil {
 				// index.html 读取异常
@@ -96,7 +91,7 @@ var NewFsHandler = func(fs ...http.FileSystem) gin.HandlerFunc {
 				return
 			}
 
-			filePath = indexFilePath
+			//filePath = indexFilePath
 			fileStat = indexFileStat
 			file = indexFile
 		}
@@ -107,10 +102,3 @@ var NewFsHandler = func(fs ...http.FileSystem) gin.HandlerFunc {
 		c.Abort()
 	}
 }
-
-var DefaultFsHandler = NewFsHandler(
-	http.Dir(*config.PublicDir), // 指定的公共目录优先级最高
-	http.FS(util.Require(func() (fs.FS, error) {
-		return fs.Sub(web.Resource, "resource/public")
-	})),
-)
