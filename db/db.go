@@ -24,7 +24,7 @@ func Initialization() (err error) {
 			Colorful:                  false,
 			IgnoreRecordNotFoundError: false,
 			ParameterizedQueries:      false,
-			LogLevel:                  logger.Warn,
+			LogLevel:                  logger.Info,
 		}),
 	})
 	if err != nil {

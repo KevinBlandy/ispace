@@ -1,7 +1,7 @@
 package model
 
 // DefaultResourceParentId 默认的顶层节点 ID
-var DefaultResourceParentId = 0
+const DefaultResourceParentId int64 = 0
 
 // Resource 会员资源
 type Resource struct {
@@ -13,7 +13,6 @@ type Resource struct {
 	Dir        bool   // 是否是目录
 	Path       string `gorm:"index"` // ID 关系树
 	Depth      uint64 // 树深度
-	DeleteTime int64  // 删除时间
 	CreateTime int64  // 创建时间
 	UpdateTime int64  // 更新时间
 }

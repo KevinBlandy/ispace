@@ -2,6 +2,7 @@ package router
 
 import (
 	"io/fs"
+	"ispace/common/types"
 	"ispace/common/util"
 	"ispace/config"
 	"ispace/web"
@@ -17,6 +18,7 @@ func New() http.Handler {
 	router := gin.New()
 	router.RedirectTrailingSlash = false
 	router.HandleMethodNotAllowed = true
+	router.MaxMultipartMemory = int64(types.MB) // 超过 1Mb 则 io 到磁盘
 
 	// 404
 	router.NoRoute(handler.NotFound)
@@ -34,6 +36,14 @@ func New() http.Handler {
 		// H(handler.DefaultCaptcha().Validate),
 		H(api.NewSignInApi().Serve),
 	)
+
+	// Api 接口
+	apiRouter := router.Group("/api", H(filter.AuthFilter))
+
+	// 文件 API 接口
+	{
+		apiRouter.GET("/resources/list", H(api.DefaultResourceApi().List)) // 文件列表
+	}
 
 	// 静态资源在最后
 	router.Use(handler.NewFsHandler(

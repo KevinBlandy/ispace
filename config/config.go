@@ -6,9 +6,11 @@ import (
 	"time"
 )
 
-var LogDir *string
+// 全局配置
 
+var LogDir *string
 var PublicDir *string
+var StoreDir *string
 
 var HttpPort *int
 var HttpHost *string
@@ -43,6 +45,7 @@ func Initialization(args []string) error {
 	// ==========================
 	LogDir = flagSet.String("log.dir", "logs", "日志输出目录")
 	PublicDir = flagSet.String("public.dir", "public", "公共资源目录")
+	StoreDir = flagSet.String("store.dir", "store", "文件资源存储目录")
 
 	// ==========================
 	// HTTP

@@ -18,6 +18,7 @@ func NewSignInApi() *SignInApi {
 }
 
 func (s SignInApi) Serve(ctx *gin.Context) (any, error) {
+
 	var request = &web.SignInApiRequest{}
 	if err := ctx.ShouldBindBodyWithJSON(request); err != nil {
 		return nil, err
