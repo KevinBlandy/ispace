@@ -42,7 +42,8 @@ func New() http.Handler {
 
 	// 文件 API 接口
 	{
-		apiRouter.GET("/resources/list", H(api.DefaultResourceApi().List)) // 文件列表
+		apiRouter.GET("/resources", H(api.DefaultResourceApi().List))    // 文件列表
+		apiRouter.POST("/resources", H(api.DefaultResourceApi().Upload)) // 上传文件
 	}
 
 	// 静态资源在最后

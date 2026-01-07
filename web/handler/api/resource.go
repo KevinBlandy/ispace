@@ -86,6 +86,21 @@ func (r ResourceApi) Upload(ctx *gin.Context) (any, error) {
 
 	defer util.SafeClose(ctx.Request.Body)
 
+	// TODO 对于大文件，可以考虑流式处理
+	//reader, err := ctx.Request.MultipartReader()
+	//if err != nil {
+	//	return nil, err
+	//}
+	//for {
+	//	part, err := reader.NextPart()
+	//	if err != nil {
+	//		if errors.Is(err, io.EOF) {
+	//			break
+	//		}
+	//		return nil, err
+	//	}
+	//}
+
 	multipartForm, err := ctx.MultipartForm()
 	if err != nil {
 		return nil, err
@@ -109,7 +124,10 @@ func (r ResourceApi) Upload(ctx *gin.Context) (any, error) {
 
 	for _, files := range multipartForm.File {
 		for _, file := range files {
-			if err := service.DefaultResourceService.Upload(ctx.Request.Context(), memberId, parentId, file); err != nil {
+			_, err = db.Transaction(ctx.Request.Context(), func(ctx context.Context) (any, error) {
+				return nil, service.DefaultResourceService.Upload(ctx, memberId, parentId, file)
+			})
+			if err != nil {
 				return nil, err
 			}
 		}

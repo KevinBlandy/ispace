@@ -3,6 +3,8 @@ package model
 // DefaultResourceParentId 默认的顶层节点 ID
 const DefaultResourceParentId int64 = 0
 
+const ResourcePathSeparator string = ","
+
 // Resource 会员资源
 type Resource struct {
 	Id         int64  `gorm:"primaryKey"`              // 资源 ID
