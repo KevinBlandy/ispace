@@ -49,7 +49,7 @@ func New() http.Handler {
 		apiRouter.POST("/resources", H(api.DefaultResourceApi().Upload))            // 上传资源
 		apiRouter.POST("/resources/mkdir", H(api.DefaultResourceApi().MkDir))       // 创建目录
 		apiRouter.POST("/resources/:id/rename", H(api.DefaultResourceApi().Rename)) // 重命名资源
-		apiRouter.DELETE("/resources", none)                                        // 删除资源
+		apiRouter.DELETE("/resources", H(api.DefaultResourceApi().Delete))          // 删除资源
 		apiRouter.POST("/resources/move", none)                                     // 移动资源
 		apiRouter.GET("/resources/download", none)                                  // 下载资源
 		apiRouter.POST("/resources/archive", none)                                  // 归档资源

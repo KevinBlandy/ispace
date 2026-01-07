@@ -21,6 +21,9 @@ func If[T any](condition bool, trueVal, falseVal T) T {
 }
 
 func SafeClose(closer io.Closer) {
+	if closer == nil {
+		return
+	}
 	_ = closer.Close()
 }
 

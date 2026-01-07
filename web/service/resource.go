@@ -455,4 +455,91 @@ func (s *ResourceService) Rename(ctx context.Context, request *web.ResourceRenam
 	return nil
 }
 
+// Delete 删除资源
+func (s *ResourceService) Delete(ctx context.Context, request *web.ResourceDeleteRequest) error {
+
+	session := db.Session(ctx)
+
+	// 查询要删除的资源
+	for _, resourceId := range request.Id {
+		resource, err := gorm.G[*model.Resource](session).
+			Select("id", "path", "object_id", "dir").
+			Where("id = ? AND member_id = ?", resourceId, request.MemberId).Take(ctx)
+
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			continue
+		}
+
+		if resource.Dir {
+			err := func() error {
+				// 删除的是目录，查询所有子级资源
+
+				rows, err := session.Table(model.Resource{}.TableName()).
+					Select("id", "path", "object_id", "dir").
+					Where("path LIKE ?", resource.Path+"%").Rows()
+
+				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+					return err
+				}
+				defer util.SafeClose(rows)
+
+				for rows.Next() {
+					var subResource = &model.Resource{}
+					if err := session.ScanRows(rows, subResource); err != nil {
+						return err
+					}
+					if err := s.delete(ctx, subResource); err != nil {
+						return err
+					}
+				}
+				return nil
+			}()
+
+			if err != nil {
+				return err
+			}
+		} else {
+			// 删除文件，
+			if err := s.delete(ctx, resource); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *ResourceService) delete(ctx context.Context, resource *model.Resource) error {
+	affected, err := gorm.G[model.Resource](db.Session(ctx)).Where("id = ?", resource.Id).Delete(ctx)
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return nil
+	}
+
+	if !resource.Dir {
+		// 更新引用
+		result := db.Session(ctx).
+			Table(model.Object{}.TableName()).
+			Where("id = ?", resource.ObjectId).UpdateColumns(map[string]any{
+			"update_time": time.Now().UnixMilli(),
+			"ref_count":   gorm.Expr("ref_count - ?", 1),
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+
+		if result.RowsAffected != 1 {
+			return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("存储引用更新失败"))
+		}
+	}
+
+	// TODO 关联的业务数据处理
+
+	return nil
+}
+
 var DefaultResourceService = NewResourceService()

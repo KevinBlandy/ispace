@@ -180,6 +180,23 @@ func (r ResourceApi) Rename(ctx *gin.Context) (any, error) {
 	return response.Ok(nil), nil
 }
 
+// Delete 删除资源
+func (r ResourceApi) Delete(ctx *gin.Context) (any, error) {
+	var request = &web.ResourceDeleteRequest{
+		MemberId: ctx.GetInt64(constant.CtxKeySubject),
+	}
+	if err := ctx.ShouldBindJSON(request); err != nil {
+		return nil, err
+	}
+	err := db.TransactionWithOutResult(ctx.Request.Context(), func(ctx context.Context) error {
+		return service.DefaultResourceService.Delete(ctx, request)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(nil), nil
+}
+
 var DefaultResourceApi = sync.OnceValue(func() *ResourceApi {
 	return NewResourceApi()
 })

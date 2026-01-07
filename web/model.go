@@ -30,8 +30,15 @@ type ResourceMkdirRequest struct {
 	Title    string `json:"title"`           // 文件夹名称
 }
 
+// ResourceRenameRequest 资源重命名请求
 type ResourceRenameRequest struct {
 	Id       int64
 	MemberId int64
 	Title    string `json:"title"` // 新的名称
+}
+
+// ResourceDeleteRequest 资源删除请求
+type ResourceDeleteRequest struct {
+	MemberId int64
+	Id       []int64 `json:"id,string"` // 要删除的资源列表
 }
