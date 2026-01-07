@@ -6,6 +6,12 @@ type SignInApiRequest struct {
 	Password string `json:"password"`
 }
 
+type ResourceListApiRequest struct {
+	MemberId int64
+	ParentId int64
+	Dir      *bool
+}
+
 // ResourceListApiResponse 资源列表
 type ResourceListApiResponse struct {
 	Id         int64  `json:"id,string"`
@@ -15,4 +21,17 @@ type ResourceListApiResponse struct {
 	Size       int64  `json:"size,string"`       // 文件大小
 	CreateTime int64  `json:"createTime,string"` // 创建时间
 	UpdateTime int64  `json:"updateTime,string"` // 更新时间
+}
+
+// ResourceMkdirRequest 创建文件夹
+type ResourceMkdirRequest struct {
+	MemberId int64
+	ParentId int64  `json:"parentId,string"` // 父级目录
+	Title    string `json:"title"`           // 文件夹名称
+}
+
+type ResourceRenameRequest struct {
+	Id       int64
+	MemberId int64
+	Title    string `json:"title"` // 新的名称
 }

@@ -1,6 +1,9 @@
 package util
 
-import "io"
+import (
+	"io"
+	"strconv"
+)
 
 func Require[T any](fn func() (T, error)) T {
 	ret, err := fn()
@@ -19,4 +22,23 @@ func If[T any](condition bool, trueVal, falseVal T) T {
 
 func SafeClose(closer io.Closer) {
 	_ = closer.Close()
+}
+
+func P[T any](value T) *T {
+	return &value
+}
+
+// BoolQuery 解析 bool 类型的查询参数
+func BoolQuery(value string, ok bool) *bool {
+	if !ok {
+		return nil
+	}
+	var boolVal bool
+
+	if value == "" {
+		boolVal = true
+	} else {
+		boolVal, _ = strconv.ParseBool(value)
+	}
+	return &boolVal
 }

@@ -3,6 +3,10 @@ package model
 // DefaultResourceParentId 默认的顶层节点 ID
 const DefaultResourceParentId int64 = 0
 
+// DefaultResourceObjectId 默认的资源 ID
+const DefaultResourceObjectId int64 = 0
+
+// ResourcePathSeparator 资源 Path 分割符
 const ResourcePathSeparator string = ","
 
 // Resource 会员资源

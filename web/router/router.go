@@ -40,10 +40,22 @@ func New() http.Handler {
 	// Api 接口
 	apiRouter := router.Group("/api", H(filter.AuthFilter))
 
+	none := func(context *gin.Context) {}
+
 	// 文件 API 接口
 	{
-		apiRouter.GET("/resources", H(api.DefaultResourceApi().List))    // 文件列表
-		apiRouter.POST("/resources", H(api.DefaultResourceApi().Upload)) // 上传文件
+		apiRouter.GET("/resources", H(api.DefaultResourceApi().List))               // 资源列表
+		apiRouter.GET("/resources/:id", H(api.DefaultResourceApi().Get))            // 读取资源
+		apiRouter.POST("/resources", H(api.DefaultResourceApi().Upload))            // 上传资源
+		apiRouter.POST("/resources/mkdir", H(api.DefaultResourceApi().MkDir))       // 创建目录
+		apiRouter.POST("/resources/:id/rename", H(api.DefaultResourceApi().Rename)) // 重命名资源
+		apiRouter.DELETE("/resources", none)                                        // 删除资源
+		apiRouter.POST("/resources/move", none)                                     // 移动资源
+		apiRouter.GET("/resources/download", none)                                  // 下载资源
+		apiRouter.POST("/resources/archive", none)                                  // 归档资源
+		apiRouter.GET("/resources/search", none)                                    // 搜索资源
+		apiRouter.POST("/resources/share", none)                                    // 分享资源
+		apiRouter.GET("/resources/group/:type", none)                               // 资源分组
 	}
 
 	// 静态资源在最后

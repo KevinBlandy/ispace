@@ -1,6 +1,7 @@
 package router
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"ispace/auth"
@@ -57,8 +58,12 @@ func errorHandle(err error, ctx *gin.Context) {
 
 	switch {
 	case errors.As(err, &serviceError):
-	case os.IsNotExist(err), errors.Is(err, gorm.ErrRecordNotFound):
+	case os.IsNotExist(err),
+		errors.Is(err, gorm.ErrRecordNotFound),
+		errors.Is(err, sql.ErrNoRows):
+
 		serviceError = common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("数据不存在"))
+
 	case os.IsPermission(err):
 		serviceError = common.NewServiceError(http.StatusForbidden, response.Fail(response.CodeForbidden).WithMessage("无权操作"))
 	case errors.Is(err, auth.ErrBadToken):

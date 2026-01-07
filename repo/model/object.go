@@ -8,7 +8,7 @@ var (
 	// ObjectCompressionGzip Gzip 压缩
 	ObjectCompressionGzip ObjectCompression = "gzip"
 	// ObjectCompressionBrotli brotli 压缩
-	ObjectCompressionBrotli ObjectCompression = "brotli"
+	ObjectCompressionBrotli ObjectCompression = "br"
 )
 
 // Object 对象

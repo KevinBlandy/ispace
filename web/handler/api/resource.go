@@ -2,19 +2,23 @@ package api
 
 import (
 	"context"
-	"errors"
+	"ispace/common"
 	"ispace/common/constant"
 	"ispace/common/response"
 	"ispace/common/util"
+	"ispace/config"
 	"ispace/db"
 	"ispace/repo/model"
 	"ispace/web"
 	"ispace/web/service"
+	"mime"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type ResourceApi struct {
@@ -26,56 +30,22 @@ func NewResourceApi() *ResourceApi {
 
 // List 资源列表
 func (r ResourceApi) List(ctx *gin.Context) (any, error) {
-	memberId := ctx.GetInt64(constant.CtxKeySubject)
+
 	parentId, err := strconv.ParseInt(ctx.Query("parentId"), 10, 64)
 	if err != nil || parentId < 0 {
 		parentId = model.DefaultResourceParentId
 	}
 
+	request := &web.ResourceListApiRequest{
+		MemberId: ctx.GetInt64(constant.CtxKeySubject),
+		ParentId: parentId,
+		Dir:      util.BoolQuery(ctx.GetQuery("dir")),
+	}
+
 	result, err := db.Transaction(ctx.Request.Context(), func(ctx context.Context) ([]*web.ResourceListApiResponse, error) {
-
-		var ret = make([]*web.ResourceListApiResponse, 0)
-
-		session := db.Session(ctx)
-		rows, err := session.Raw(`
-			SELECT
-				id,
-				parent_id,
-				title,
-				dir,
-				create_time,
-				update_time,
-				(
-					CASE dir 
-						WHEN 1 THEN 0
-						WHEN 0 THEN (SELECT size from t_object WHERE id = object_id)
-					END
-				) size
-			FROM
-				t_resource
-			WHERE
-				member_id = ? AND parent_id = ?
-			ORDER BY dir DESC, title ASC
-		`, memberId, parentId).Rows()
-
-		if err != nil {
-			return nil, err
-		}
-
-		defer util.SafeClose(rows)
-
-		for rows.Next() {
-			resource := &web.ResourceListApiResponse{}
-			if err := session.ScanRows(rows, resource); err != nil {
-				return nil, err
-			}
-			ret = append(ret, resource)
-		}
-
-		return ret, nil
+		return service.DefaultResourceService.List(ctx, request)
 	}, db.TxReadOnly)
-
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	if err != nil {
 		return nil, err
 	}
 	return response.Ok(result), nil
@@ -87,19 +57,6 @@ func (r ResourceApi) Upload(ctx *gin.Context) (any, error) {
 	defer util.SafeClose(ctx.Request.Body)
 
 	// TODO 对于大文件，可以考虑流式处理
-	//reader, err := ctx.Request.MultipartReader()
-	//if err != nil {
-	//	return nil, err
-	//}
-	//for {
-	//	part, err := reader.NextPart()
-	//	if err != nil {
-	//		if errors.Is(err, io.EOF) {
-	//			break
-	//		}
-	//		return nil, err
-	//	}
-	//}
 
 	multipartForm, err := ctx.MultipartForm()
 	if err != nil {
@@ -111,12 +68,10 @@ func (r ResourceApi) Upload(ctx *gin.Context) (any, error) {
 
 	// 上传目录
 	var parentId = model.DefaultResourceParentId
-	parentIds := multipartForm.Value["parentId"]
-	if len(parentIds) > 0 {
-		parentId, err = strconv.ParseInt(parentIds[0], 10, 64)
-		if err != nil || parentId < 0 {
-			parentId = model.DefaultResourceParentId
-		}
+
+	parentId, _ = strconv.ParseInt(ctx.Query("parentId"), 10, 64)
+	if parentId < 0 {
+		parentId = model.DefaultResourceParentId
 	}
 
 	// 会员 ID
@@ -132,7 +87,97 @@ func (r ResourceApi) Upload(ctx *gin.Context) (any, error) {
 			}
 		}
 	}
+	return response.Ok(nil), nil
+}
+
+// Get 读取资
+func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
+	// 会员 ID
+	var memberId = ctx.GetInt64(constant.CtxKeySubject)
+	// 资源 ID
+	resourceId, _ := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if resourceId < 0 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
+	}
+
+	resource, err := db.Transaction(ctx.Request.Context(), func(ctx context.Context) (struct {
+		Title       string
+		Compression model.ObjectCompression
+		ContentType string
+		Path        string
+	}, error) {
+		return service.DefaultResourceService.Get(ctx, memberId, resourceId)
+	}, db.TxReadOnly)
+	if err != nil {
+		return nil, err
+	}
+
+	// 打开资源文件
+	file, err := os.Open(filepath.Join(*config.StoreDir, filepath.FromSlash(resource.Path)))
+	if err != nil {
+		return nil, err
+	}
+	defer util.SafeClose(file)
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	// 响应客户端
+	ctx.Header("Content-Length", strconv.FormatInt(stat.Size(), 10))
+	ctx.Header("Content-Type", resource.ContentType)
+	if resource.Compression != model.ObjectCompressionNone {
+		ctx.Header("Content-Encoding", string(resource.Compression))
+	}
+	download := util.BoolQuery(ctx.GetQuery("download"))
+	if download != nil && *download {
+		ctx.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": resource.Title}))
+	}
+
+	http.ServeContent(ctx.Writer, ctx.Request, resource.Title, stat.ModTime(), file)
+
+	// _, _ = io.Copy(ctx.Writer, file)
+
+	ctx.Abort()
 	return nil, nil
+}
+
+// MkDir 创建文件夹
+func (r ResourceApi) MkDir(ctx *gin.Context) (any, error) {
+	var request = &web.ResourceMkdirRequest{MemberId: ctx.GetInt64(constant.CtxKeySubject)}
+	if err := ctx.ShouldBindJSON(request); err != nil {
+		return nil, err
+	}
+	err := db.TransactionWithOutResult(ctx.Request.Context(), func(ctx context.Context) error {
+		return service.DefaultResourceService.Mkdir(ctx, request)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(nil), nil
+}
+
+// Rename 重命名资源
+func (r ResourceApi) Rename(ctx *gin.Context) (any, error) {
+
+	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
+	}
+	var request = &web.ResourceRenameRequest{
+		Id:       id,
+		MemberId: ctx.GetInt64(constant.CtxKeySubject),
+	}
+	if err := ctx.ShouldBindJSON(request); err != nil {
+		return nil, err
+	}
+	err = db.TransactionWithOutResult(ctx.Request.Context(), func(ctx context.Context) error {
+		return service.DefaultResourceService.Rename(ctx, request)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(nil), nil
 }
 
 var DefaultResourceApi = sync.OnceValue(func() *ResourceApi {
