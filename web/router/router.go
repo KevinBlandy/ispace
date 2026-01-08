@@ -44,13 +44,14 @@ func New() http.Handler {
 
 	// 文件 API 接口
 	{
+		apiRouter.GET("/resources/tree", H(api.DefaultResourceApi().Tree))          // 完整的文件树
 		apiRouter.GET("/resources", H(api.DefaultResourceApi().List))               // 资源列表
 		apiRouter.GET("/resources/:id", H(api.DefaultResourceApi().Get))            // 读取资源
 		apiRouter.POST("/resources", H(api.DefaultResourceApi().Upload))            // 上传资源
 		apiRouter.POST("/resources/mkdir", H(api.DefaultResourceApi().MkDir))       // 创建目录
 		apiRouter.POST("/resources/:id/rename", H(api.DefaultResourceApi().Rename)) // 重命名资源
 		apiRouter.DELETE("/resources", H(api.DefaultResourceApi().Delete))          // 删除资源
-		apiRouter.POST("/resources/move", none)                                     // 移动资源
+		apiRouter.POST("/resources/move", H(api.DefaultResourceApi().Move))         // 移动资源
 		apiRouter.GET("/resources/download", none)                                  // 下载资源
 		apiRouter.POST("/resources/archive", none)                                  // 归档资源
 		apiRouter.GET("/resources/search", none)                                    // 搜索资源

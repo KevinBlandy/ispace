@@ -28,6 +28,18 @@ func NewResourceApi() *ResourceApi {
 	return &ResourceApi{}
 }
 
+// Tree 完整的文件树
+func (r ResourceApi) Tree(ctx *gin.Context) (any, error) {
+	memberId := ctx.GetInt64(constant.CtxKeySubject)
+	result, err := db.Transaction(ctx.Request.Context(), func(ctx context.Context) ([]*web.ResourceTreeApiResponse, error) {
+		return service.DefaultResourceService.Tree(ctx, memberId)
+	}, db.TxReadOnly)
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(result), nil
+}
+
 // List 资源列表
 func (r ResourceApi) List(ctx *gin.Context) (any, error) {
 
@@ -190,6 +202,24 @@ func (r ResourceApi) Delete(ctx *gin.Context) (any, error) {
 	}
 	err := db.TransactionWithOutResult(ctx.Request.Context(), func(ctx context.Context) error {
 		return service.DefaultResourceService.Delete(ctx, request)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(nil), nil
+}
+
+// Move 移动资源
+func (r ResourceApi) Move(ctx *gin.Context) (any, error) {
+	var request = &web.ResourceMoveRequest{
+		MemberId: ctx.GetInt64(constant.CtxKeySubject),
+	}
+
+	if err := ctx.ShouldBindJSON(request); err != nil {
+		return nil, err
+	}
+	err := db.TransactionWithOutResult(ctx.Request.Context(), func(ctx context.Context) error {
+		return service.DefaultResourceService.Move(ctx, request)
 	})
 	if err != nil {
 		return nil, err

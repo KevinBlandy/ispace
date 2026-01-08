@@ -1,5 +1,7 @@
 package web
 
+import "ispace/common/types"
+
 // SignInApiRequest 登录
 type SignInApiRequest struct {
 	Account  string `json:"account"`
@@ -10,6 +12,12 @@ type ResourceListApiRequest struct {
 	MemberId int64
 	ParentId int64
 	Dir      *bool
+}
+
+// ResourceTreeApiResponse 完整的资源树
+type ResourceTreeApiResponse struct {
+	ResourceListApiResponse
+	Entries []*ResourceTreeApiResponse `json:"entries"` // 子项目
 }
 
 // ResourceListApiResponse 资源列表
@@ -40,5 +48,12 @@ type ResourceRenameRequest struct {
 // ResourceDeleteRequest 资源删除请求
 type ResourceDeleteRequest struct {
 	MemberId int64
-	Id       []int64 `json:"id,string"` // 要删除的资源列表
+	Id       types.Int64Slice `json:"id,string"` // 要删除的资源列表
+}
+
+// ResourceMoveRequest 移动资源
+type ResourceMoveRequest struct {
+	MemberId int64
+	Id       types.Int64Slice `json:"id,string"`       // From 资源 Id
+	ParentId int64            `json:"parentId,string"` // 目标 ID
 }
