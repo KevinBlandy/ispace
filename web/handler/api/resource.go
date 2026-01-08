@@ -156,7 +156,7 @@ func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
 
 // MkDir 创建文件夹
 func (r ResourceApi) MkDir(ctx *gin.Context) (any, error) {
-	var request = &web.ResourceMkdirRequest{MemberId: ctx.GetInt64(constant.CtxKeySubject)}
+	request := &web.ResourceMkdirRequest{MemberId: ctx.GetInt64(constant.CtxKeySubject)}
 	if err := ctx.ShouldBindJSON(request); err != nil {
 		return nil, err
 	}
@@ -194,7 +194,7 @@ func (r ResourceApi) Rename(ctx *gin.Context) (any, error) {
 
 // Delete 删除资源
 func (r ResourceApi) Delete(ctx *gin.Context) (any, error) {
-	var request = &web.ResourceDeleteRequest{
+	request := &web.ResourceDeleteRequest{
 		MemberId: ctx.GetInt64(constant.CtxKeySubject),
 	}
 	if err := ctx.ShouldBindJSON(request); err != nil {
@@ -211,7 +211,7 @@ func (r ResourceApi) Delete(ctx *gin.Context) (any, error) {
 
 // Move 移动资源
 func (r ResourceApi) Move(ctx *gin.Context) (any, error) {
-	var request = &web.ResourceMoveRequest{
+	request := &web.ResourceMoveRequest{
 		MemberId: ctx.GetInt64(constant.CtxKeySubject),
 	}
 
