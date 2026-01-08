@@ -1,5 +1,6 @@
 package model
 
+// ObjectCompression 对象的压缩方式，使用 Content-Encoding 值
 type ObjectCompression string
 
 var (
@@ -7,7 +8,7 @@ var (
 	ObjectCompressionNone ObjectCompression = "none"
 	// ObjectCompressionGzip Gzip 压缩
 	ObjectCompressionGzip ObjectCompression = "gzip"
-	// ObjectCompressionBrotli brotli 压缩
+	// ObjectCompressionBrotli Brotli 压缩
 	ObjectCompressionBrotli ObjectCompression = "br"
 )
 
