@@ -2,19 +2,21 @@ package api
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"ispace/common"
 	"ispace/common/constant"
 	"ispace/common/response"
 	"ispace/common/util"
-	"ispace/config"
 	"ispace/db"
 	"ispace/repo/model"
+	"ispace/store"
 	"ispace/web"
 	"ispace/web/service"
 	"mime"
+	"mime/multipart"
 	"net/http"
-	"os"
-	"path/filepath"
+	"path"
 	"strconv"
 	"sync"
 
@@ -82,7 +84,7 @@ func (r ResourceApi) Upload(ctx *gin.Context) (any, error) {
 	var parentId = model.DefaultResourceParentId
 
 	parentId, _ = strconv.ParseInt(ctx.Query("parentId"), 10, 64)
-	if parentId < 0 {
+	if parentId <= 0 {
 		parentId = model.DefaultResourceParentId
 	}
 
@@ -125,11 +127,12 @@ func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
 	}
 
 	// 打开资源文件
-	file, err := os.Open(filepath.Join(*config.StoreDir, filepath.FromSlash(resource.Path)))
+	file, err := store.DefaultStore().Open(resource.Path)
 	if err != nil {
 		return nil, err
 	}
 	defer util.SafeClose(file)
+
 	stat, err := file.Stat()
 	if err != nil {
 		return nil, err
@@ -224,6 +227,48 @@ func (r ResourceApi) Move(ctx *gin.Context) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	return response.Ok(nil), nil
+}
+
+// UploadDir 上传文件夹
+func (r ResourceApi) UploadDir(g *gin.Context) (any, error) {
+	defer util.SafeClose(g.Request.Body)
+	form, err := g.MultipartForm()
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		_ = form.RemoveAll()
+	}()
+
+	for key, files := range form.File {
+		fmt.Println(key, "==================")
+		for _, file := range files {
+
+			// 从 Header 中解析出完整带路径的文件名称
+			_, params, err := mime.ParseMediaType(file.Header.Get("Content-Disposition"))
+			if err != nil {
+				return nil, err
+			}
+
+			// TODO 注意，路径安全问题
+			filename := params["filename"] // 完整的 filename
+
+			path.Clean(filename)
+
+			fmt.Println(file.Filename, filename, file.Size)
+			func(header *multipart.FileHeader) {
+				reader, err := header.Open()
+				if err != nil {
+					return
+				}
+				defer util.SafeClose(reader)
+				_, _ = io.Copy(io.Discard, reader)
+			}(file)
+		}
+	}
+
 	return response.Ok(nil), nil
 }
 

@@ -1,8 +1,12 @@
 package store
 
 import (
-	"io"
+	"context"
+	"ispace/config"
+	"log/slog"
 	"os"
+	"path/filepath"
+	"sync"
 )
 
 // Store 文件存储实现 Store
@@ -15,17 +19,18 @@ func (s *Store) Delete() error {
 	return os.RemoveAll(s.Name())
 }
 
-// Save 保存的库
-func (s *Store) Save(reader io.Reader) error {
+// Open 读取文件
+func (s *Store) Open(name string) (*os.File, error) {
+	return s.Root.Open(filepath.FromSlash(name))
+}
 
-	// 目录打散
-
-	file, err := s.OpenFile("", os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
-	if err != nil {
-		return err
+// OpenFile 创建文件，如果目录不存在会先创建目录
+func (s *Store) OpenFile(name string, flag int, perm os.FileMode) (*os.File, error) {
+	name = filepath.FromSlash(name)
+	if err := s.MkdirAll(filepath.Dir(name), perm); err != nil && !os.IsExist(err) {
+		return nil, err
 	}
-	_, err = io.Copy(file, reader)
-	return err
+	return s.Root.OpenFile(name, flag, perm)
 }
 
 func New(dir string) (*Store, error) {
@@ -36,6 +41,12 @@ func New(dir string) (*Store, error) {
 	return &Store{Root: root}, nil
 }
 
-func NewFromRoot(root *os.Root) *Store {
-	return &Store{Root: root}
-}
+// DefaultStore 全局默认的资源存储 Bucket
+var DefaultStore = sync.OnceValue(func() *Store {
+	store, err := New(*config.StoreDir)
+	if err != nil {
+		slog.ErrorContext(context.Background(), "打开存储目录异常", slog.String("err", err.Error()))
+		panic(err)
+	}
+	return store
+})

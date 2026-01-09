@@ -47,7 +47,8 @@ func New() http.Handler {
 		apiRouter.GET("/resources/tree", H(api.DefaultResourceApi().Tree))          // 完整的文件树
 		apiRouter.GET("/resources", H(api.DefaultResourceApi().List))               // 资源列表
 		apiRouter.GET("/resources/:id", H(api.DefaultResourceApi().Get))            // 读取资源
-		apiRouter.POST("/resources", H(api.DefaultResourceApi().Upload))            // 上传资源
+		apiRouter.POST("/resources", H(api.DefaultResourceApi().Upload))            // 上传单个资源
+		apiRouter.POST("/resources/dir", H(api.DefaultResourceApi().UploadDir))     // 上传文件夹
 		apiRouter.POST("/resources/mkdir", H(api.DefaultResourceApi().MkDir))       // 创建目录
 		apiRouter.POST("/resources/:id/rename", H(api.DefaultResourceApi().Rename)) // 重命名资源
 		apiRouter.DELETE("/resources", H(api.DefaultResourceApi().Delete))          // 删除资源

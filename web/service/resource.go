@@ -13,10 +13,10 @@ import (
 	"ispace/common/response"
 	"ispace/common/types"
 	"ispace/common/util"
-	"ispace/config"
 	"ispace/db"
 	"ispace/repo"
 	"ispace/repo/model"
+	"ispace/store"
 	"ispace/web"
 	"log/slog"
 	"mime"
@@ -209,6 +209,10 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	if fileHeader.Size == 0 {
 		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("不能上传空文件"))
 	}
+	if strings.TrimSpace(fileHeader.Filename) == "" {
+		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("文件名称不能为空"))
+	}
+
 	file, err := fileHeader.Open()
 	if err != nil {
 		return err
@@ -250,48 +254,36 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 		}
 	}
 
-	var reader io.ReadCloser = file
-
 	// 目录打散 & 随机文件名称
-	dir := s.RandDir()
-	fileName := id.UUID()
+	newFilePath := path.Join(path.Join(s.RandDir()...), id.UUID())
 
-	// 逻辑路径
-	absPath := path.Join(path.Join(dir...), fileName)
-
-	// 本地存储的完整路径
-	newFilePath := filepath.Join(*config.StoreDir, filepath.FromSlash(absPath))
-
-	// 先尝试创建完整的目录
-	if err := os.MkdirAll(filepath.Dir(newFilePath), os.ModePerm); err != nil && !os.IsExist(err) {
-		return err
-	}
-
-	// 创建本地文件
-	newFile, err := os.OpenFile(newFilePath, os.O_CREATE|os.O_EXCL|os.O_RDWR, os.ModePerm)
+	// 创建文件
+	newFile, err := store.DefaultStore().OpenFile(newFilePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.ModePerm)
 	if err != nil {
 		return err
 	}
 	defer util.SafeClose(newFile)
 
-	var newFileWriter io.WriteCloser = newFile
+	var writer io.WriteCloser = newFile
 
-	// 压缩判断
+	// 压缩
 	var compress = fileHeader.Size > compressionThreshold
 	if compress {
-		newFileWriter = gzip.NewWriter(newFile)
-		defer util.SafeClose(newFileWriter)
+		writer = gzip.NewWriter(newFile)
+		defer util.SafeClose(writer)
 	}
 
-	// IO 落盘
-	if _, err = io.Copy(newFileWriter, reader); err != nil {
+	// 写入
+	written, err := io.Copy(writer, file)
+	if err != nil {
 		return err
 	}
 
-	slog.InfoContext(ctx, "文件上传",
-		slog.String("path", absPath),
+	slog.InfoContext(ctx, "新文件",
 		slog.String("name", fileHeader.Filename),
 		slog.Int64("size", fileHeader.Size),
+		slog.String("path", newFilePath),
+		slog.Int64("written", written),
 		slog.String("hash", hash),
 	)
 
@@ -300,7 +292,7 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 
 	object := &model.Object{
 		Id:          id.Next().Int64(),
-		Path:        absPath,
+		Path:        newFilePath,
 		Compression: util.If(compress, model.ObjectCompressionGzip, model.ObjectCompressionNone),
 		Hash:        hash,
 		Size:        fileHeader.Size,
