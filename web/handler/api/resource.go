@@ -16,7 +16,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
-	"path"
+	"path/filepath"
 	"strconv"
 	"sync"
 
@@ -149,9 +149,15 @@ func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
 		ctx.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": resource.Title}))
 	}
 
-	http.ServeContent(ctx.Writer, ctx.Request, resource.Title, stat.ModTime(), file)
+	/*
+		TODO 待商榷
+		1. 直接 IO Gzip 文件，会导致不能正确处理 Range 请求，例如，会影响到视频文件播放的 Range 请求，且不支持缓存协商。
+		2. 使用 http.ServeContent 响应，可以正确处理 Range 和缓存协商，但是问题在于 磁盘文件已经是 gzip 格式，Range 本身没意义。
+	*/
 
-	// _, _ = io.Copy(ctx.Writer, file)
+	//http.ServeContent(ctx.Writer, ctx.Request, resource.Title, stat.ModTime(), file)
+
+	_, _ = io.Copy(ctx.Writer, file)
 
 	ctx.Abort()
 	return nil, nil
@@ -231,9 +237,9 @@ func (r ResourceApi) Move(ctx *gin.Context) (any, error) {
 }
 
 // UploadDir 上传文件夹
-func (r ResourceApi) UploadDir(g *gin.Context) (any, error) {
-	defer util.SafeClose(g.Request.Body)
-	form, err := g.MultipartForm()
+func (r ResourceApi) UploadDir(ctx *gin.Context) (any, error) {
+	defer util.SafeClose(ctx.Request.Body)
+	form, err := ctx.MultipartForm()
 	if err != nil {
 		return nil, err
 	}
@@ -242,20 +248,34 @@ func (r ResourceApi) UploadDir(g *gin.Context) (any, error) {
 		_ = form.RemoveAll()
 	}()
 
-	for key, files := range form.File {
-		fmt.Println(key, "==================")
+	// 上传目录
+	var parentId = model.DefaultResourceParentId
+
+	parentId, _ = strconv.ParseInt(ctx.Query("parentId"), 10, 64)
+	if parentId <= 0 {
+		parentId = model.DefaultResourceParentId
+	}
+
+	// 会员 ID
+	_ = ctx.GetInt64(constant.CtxKeySubject)
+
+	// 获取完整的目录
+
+	for _, files := range form.File {
+
 		for _, file := range files {
 
 			// 从 Header 中解析出完整带路径的文件名称
 			_, params, err := mime.ParseMediaType(file.Header.Get("Content-Disposition"))
 			if err != nil {
-				return nil, err
+				return nil, err // 参数解析失败
+			}
+			filename := params["filename"] // 完整的 filename
+			if filename == "" {
+				return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("文件名称不能为空"))
 			}
 
-			// TODO 注意，路径安全问题
-			filename := params["filename"] // 完整的 filename
-
-			path.Clean(filename)
+			filepath.FromSlash(filepath.ToSlash(file.Filename))
 
 			fmt.Println(file.Filename, filename, file.Size)
 			func(header *multipart.FileHeader) {

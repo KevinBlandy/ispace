@@ -10,6 +10,7 @@ import (
 	"ispace/web/handler"
 	"ispace/web/handler/api"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -62,8 +63,12 @@ func New() http.Handler {
 
 	// 静态资源在最后
 	router.Use(handler.NewFsHandler(
-		http.Dir(*config.PublicDir), // 指定的公共目录优先级最高
-		http.FS(util.Require(func() (fs.FS, error) {
+
+		http.FS(util.Require(func() (*os.Root, error) { // 指定的公共目录优先级最高
+			return os.OpenRoot(*config.PublicDir)
+		}).FS()),
+
+		http.FS(util.Require(func() (fs.FS, error) { // 嵌入式目录
 			return fs.Sub(web.Resource, "resource/public")
 		})),
 	))
