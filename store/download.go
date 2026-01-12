@@ -5,10 +5,15 @@ import (
 	"io"
 	"io/fs"
 	"ispace/common/util"
+	"ispace/repo/model"
 	"mime"
 	"net/http"
 	"path/filepath"
 )
+
+func (s *Store) Download(w http.ResponseWriter, resources ...model.Resource) (err error) {
+	return err
+}
 
 // Downloads 下载单个/多个文件
 func (s *Store) Downloads(w http.ResponseWriter, paths ...string) (err error) {
@@ -18,14 +23,14 @@ func (s *Store) Downloads(w http.ResponseWriter, paths ...string) (err error) {
 	}
 
 	if len(paths) == 1 {
-		file := paths[0]
-		stat, err := s.Stat(file)
+		filePath := filepath.FromSlash(paths[0])
+		stat, err := s.Stat(filePath)
 		if err != nil {
 			return err
 		}
 		if !stat.IsDir() {
 			// 只有一个文件，且文件非目录
-			file, err := s.Open(file)
+			file, err := s.Root.Open(filePath)
 			if err != nil {
 				return err
 			}

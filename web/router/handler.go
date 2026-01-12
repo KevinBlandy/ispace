@@ -27,13 +27,12 @@ func H(fn func(*gin.Context) (any, error)) gin.HandlerFunc {
 			errorHandle(err, c)
 			c.Abort()
 			return
-		}
-
-		if result != nil {
+		} else if result != nil {
 			resultHandle(result, c)
+		} else {
+			// 继续执行链
+			c.Next()
 		}
-
-		c.Next()
 	}
 }
 

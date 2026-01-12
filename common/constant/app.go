@@ -7,6 +7,8 @@ import (
 // WorkDir 工作目录
 var WorkDir string
 
+var Slash = "/"
+
 func init() {
 
 	var err error

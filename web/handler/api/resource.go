@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"ispace/common"
 	"ispace/common/constant"
@@ -16,8 +15,8 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
-	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -259,37 +258,73 @@ func (r ResourceApi) UploadDir(ctx *gin.Context) (any, error) {
 	// 会员 ID
 	_ = ctx.GetInt64(constant.CtxKeySubject)
 
-	// 获取完整的目录
+	// 目录 & 文件
+	var dirs = make(map[string][]*multipart.FileHeader)
 
 	for _, files := range form.File {
 
-		for _, file := range files {
+		// rootDir 根目录
+		var commonRoot = ""
 
+		var fileSlice = make([]*multipart.FileHeader, 0)
+
+		for _, file := range files {
 			// 从 Header 中解析出完整带路径的文件名称
 			_, params, err := mime.ParseMediaType(file.Header.Get("Content-Disposition"))
 			if err != nil {
 				return nil, err // 参数解析失败
 			}
-			filename := params["filename"] // 完整的 filename
+
+			// 获取文件的原始名称，且处理跨平台换行符为 /
+			filename := strings.ReplaceAll(params["filename"], "\\", constant.Slash)
 			if filename == "" {
 				return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("文件名称不能为空"))
 			}
 
-			filepath.FromSlash(filepath.ToSlash(file.Filename))
+			// 拆分路径中的每个 part
+			parts := strings.Split(filename, constant.Slash)
 
-			fmt.Println(file.Filename, filename, file.Size)
-			func(header *multipart.FileHeader) {
-				reader, err := header.Open()
-				if err != nil {
-					return
-				}
-				defer util.SafeClose(reader)
-				_, _ = io.Copy(io.Discard, reader)
-			}(file)
+			// 必须要目录开头
+			if len(parts) == 0 {
+				return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("目录不能为空"))
+			}
+
+			// 当前根目录
+			currentRoot := parts[0]
+			if commonRoot == "" {
+				commonRoot = currentRoot
+			} else if commonRoot != currentRoot {
+				return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("不能包含多个根目录"))
+			}
+			if strings.TrimSpace(commonRoot) == "" {
+				return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("目录名称不能为空"))
+			}
+
+			// 去掉公共目录
+			file.Filename = strings.Join(parts[1:], "/")
+
+			fileSlice = append(fileSlice, file)
 		}
+
+		if len(fileSlice) == 0 {
+			return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("文件项目不能为空"))
+		}
+
+		if _, ok := dirs[commonRoot]; ok {
+			return nil, common.NewServiceError(http.StatusBadRequest,
+				response.Fail(response.CodeBadRequest).WithMessage("包含重名目录"))
+		}
+		dirs[commonRoot] = fileSlice
 	}
 
+	// TODO 执行文件夹上传
+
 	return response.Ok(nil), nil
+}
+
+// Download 下载资源文件
+func (r ResourceApi) Download(g *gin.Context) (any, error) {
+	return nil, nil
 }
 
 var DefaultResourceApi = sync.OnceValue(func() *ResourceApi {

@@ -25,7 +25,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -654,14 +653,14 @@ func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*web.Reso
 
 	defer util.SafeClose(rows)
 
-	var resources = make(map[int64]*web.ResourceTreeApiResponse)
+	var resources = make([]*web.ResourceTreeApiResponse, 0)
 
 	for rows.Next() {
 		resource := &web.ResourceListApiResponse{}
 		if err := session.ScanRows(rows, resource); err != nil {
 			return nil, err
 		}
-		resources[resource.Id] = &web.ResourceTreeApiResponse{ResourceListApiResponse: *resource}
+		resources = append(resources, &web.ResourceTreeApiResponse{ResourceListApiResponse: *resource})
 	}
 
 	// 根元素
@@ -672,30 +671,18 @@ func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*web.Reso
 		}
 	}
 
-	var entrySort = func(a, b *web.ResourceTreeApiResponse) int {
-		if a.Dir != b.Dir {
-			return util.If(a.Dir, -1, 1)
-		}
-		return strings.Compare(a.Title, b.Title)
-	}
-
-	slices.SortStableFunc(root, entrySort)
-
 	// 构建树结构
-	var subEntry func(*web.ResourceTreeApiResponse, map[int64]*web.ResourceTreeApiResponse)
+	var subEntry func(*web.ResourceTreeApiResponse, []*web.ResourceTreeApiResponse)
 
-	subEntry = func(resource *web.ResourceTreeApiResponse, resourceMap map[int64]*web.ResourceTreeApiResponse) {
-		for _, entry := range resourceMap {
+	subEntry = func(resource *web.ResourceTreeApiResponse, resourceSlice []*web.ResourceTreeApiResponse) {
+		for _, entry := range resourceSlice {
 			if entry.ParentId == resource.Id {
 				resource.Entries = append(resource.Entries, entry)
 			}
 		}
 		if len(resource.Entries) > 0 {
-
-			slices.SortStableFunc(resource.Entries, entrySort)
-
 			for _, entry := range resource.Entries {
-				subEntry(entry, resourceMap)
+				subEntry(entry, resourceSlice)
 			}
 		}
 	}

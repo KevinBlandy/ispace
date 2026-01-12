@@ -54,7 +54,7 @@ func New() http.Handler {
 		apiRouter.POST("/resources/:id/rename", H(api.DefaultResourceApi().Rename)) // 重命名资源
 		apiRouter.DELETE("/resources", H(api.DefaultResourceApi().Delete))          // 删除资源
 		apiRouter.POST("/resources/move", H(api.DefaultResourceApi().Move))         // 移动资源
-		apiRouter.GET("/resources/download", none)                                  // 下载资源
+		apiRouter.GET("/resources/download", H(api.DefaultResourceApi().Download))  // 下载资源
 		apiRouter.POST("/resources/archive", none)                                  // 归档资源
 		apiRouter.GET("/resources/search", none)                                    // 搜索资源
 		apiRouter.POST("/resources/share", none)                                    // 分享资源
