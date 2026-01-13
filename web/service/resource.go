@@ -698,8 +698,10 @@ func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*web.Reso
 // UniqueTitle 计算指定目录下的唯一文件名称
 func (s *ResourceService) UniqueTitle(ctx context.Context, dir bool, title string, id, memberId, parentId int64) (string, error) {
 
+	// 目录的话，忽略扩展名称
 	ext := util.If(dir, "", filepath.Ext(title))
 
+	// 文件的话，截掉扩展
 	fileName := util.If(dir, title, strings.TrimSuffix(title, ext))
 
 	var counter = 1
