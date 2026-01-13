@@ -653,36 +653,38 @@ func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*web.Reso
 
 	defer util.SafeClose(rows)
 
-	var resources = make([]*web.ResourceTreeApiResponse, 0)
+	var resources = make(map[int64]*web.ResourceTreeApiResponse)
 
 	for rows.Next() {
 		resource := &web.ResourceListApiResponse{}
 		if err := session.ScanRows(rows, resource); err != nil {
 			return nil, err
 		}
-		resources = append(resources, &web.ResourceTreeApiResponse{ResourceListApiResponse: *resource})
+		resources[resource.Id] = &web.ResourceTreeApiResponse{ResourceListApiResponse: *resource}
 	}
 
-	// 根元素
+	// 先查询根元素
 	var root = make([]*web.ResourceTreeApiResponse, 0)
 	for _, resource := range resources {
 		if resource.ParentId == model.DefaultResourceParentId {
 			root = append(root, resource)
+			delete(resources, resource.Id)
 		}
 	}
 
 	// 构建树结构
-	var subEntry func(*web.ResourceTreeApiResponse, []*web.ResourceTreeApiResponse)
+	var subEntry func(*web.ResourceTreeApiResponse, map[int64]*web.ResourceTreeApiResponse)
 
-	subEntry = func(resource *web.ResourceTreeApiResponse, resourceSlice []*web.ResourceTreeApiResponse) {
-		for _, entry := range resourceSlice {
+	subEntry = func(resource *web.ResourceTreeApiResponse, resourceMap map[int64]*web.ResourceTreeApiResponse) {
+		for _, entry := range resourceMap {
 			if entry.ParentId == resource.Id {
 				resource.Entries = append(resource.Entries, entry)
+				delete(resourceMap, resource.Id)
 			}
 		}
 		if len(resource.Entries) > 0 {
 			for _, entry := range resource.Entries {
-				subEntry(entry, resourceSlice)
+				subEntry(entry, resourceMap)
 			}
 		}
 	}
