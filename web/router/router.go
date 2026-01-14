@@ -27,7 +27,7 @@ func New() http.Handler {
 	router.NoMethod(handler.MethodNotAllowed)
 
 	// 请求 ID
-	router.Use(filter.NewRequestIdFilter())
+	router.Use(filter.NewRequestIdFilter(), filter.Cors)
 
 	// 图形验证码
 	router.GET("/captcha", handler.DefaultCaptcha().Serve)
