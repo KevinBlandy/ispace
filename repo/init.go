@@ -13,9 +13,12 @@ func Initialization() error {
 	//	}
 	//}
 	return db.Get().AutoMigrate(
+		&model.Admin{},
 		&model.Member{},
 		&model.Object{},
 		&model.Resource{},
+		&model.Share{},
+		&model.ShareResource{},
 		&model.SysConfig{},
 	)
 }

@@ -2,11 +2,14 @@ package api
 
 import (
 	"context"
+	"ispace/common/constant"
 	"ispace/common/response"
 	"ispace/db"
 	"ispace/repo/model"
 	"ispace/web"
 	"ispace/web/service"
+	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,5 +35,19 @@ func (s SignInApi) Serve(ctx *gin.Context) (any, error) {
 		return nil, err
 	}
 
-	return response.Ok(member), nil
+	signed, err := service.DefaultMemberSessionService().Issue(ctx.Request.Context(), member.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx.SetCookieData(&http.Cookie{
+		Name:     constant.HttpCookieMemberToken,
+		Value:    signed,
+		Path:     "/",
+		MaxAge:   int((time.Hour * 24 * 365).Seconds()),
+		Secure:   false,
+		HttpOnly: true,
+		SameSite: http.SameSiteDefaultMode,
+	})
+	return response.Ok(nil), nil
 }

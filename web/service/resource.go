@@ -265,8 +265,9 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 
 	var writer io.WriteCloser = newFile
 
-	// 压缩
-	var compress = fileHeader.Size > compressionThreshold
+	// 非音/视频文件且体积大于阈值，才进行压缩
+	var compress = !(strings.HasPrefix(contentType, "video/") || strings.HasPrefix(contentType, "audio/")) &&
+		fileHeader.Size > compressionThreshold
 	if compress {
 		writer = gzip.NewWriter(newFile)
 		defer util.SafeClose(writer)

@@ -4,6 +4,7 @@ import (
 	"ispace/common/response"
 )
 
+// ServiceError 业务异常
 type ServiceError interface {
 	StatusCode() int              // 业务的 Http 状态码
 	Response() *response.Response // 业务的响应数据

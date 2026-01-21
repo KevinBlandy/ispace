@@ -7,4 +7,6 @@ var (
 	CtxKeyLoggerName = "logger"
 	// CtxKeySubject 当前请求中的 Subject
 	CtxKeySubject = "subject"
+	// CtxKeySession 当前请求中的 session
+	CtxKeySession = "session"
 )

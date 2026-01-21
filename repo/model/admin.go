@@ -1,7 +1,7 @@
 package model
 
-// Member 会员
-type Member struct {
+// Admin 系统管理员
+type Admin struct {
 	Id         int64 `gorm:"primaryKey"`
 	Avatar     string
 	Account    string `gorm:"uniqueIndex"`
@@ -12,6 +12,6 @@ type Member struct {
 	UpdateTime int64
 }
 
-func (Member) TableName() string {
-	return "t_member"
+func (Admin) TableName() string {
+	return "t_admin"
 }

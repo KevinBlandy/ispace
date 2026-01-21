@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"ispace/auth"
 	"ispace/common"
 	"ispace/common/response"
 	"log/slog"
@@ -65,8 +64,8 @@ func errorHandle(err error, ctx *gin.Context) {
 
 	case os.IsPermission(err):
 		serviceError = common.NewServiceError(http.StatusForbidden, response.Fail(response.CodeForbidden).WithMessage("无权操作"))
-	case errors.Is(err, auth.ErrBadToken):
-		serviceError = common.NewServiceError(http.StatusUnauthorized, response.Fail(response.CodeUnauthorized).WithMessage("请先登录"))
+	//case errors.Is(err, auth.ErrBadToken):
+	//	serviceError = common.NewServiceError(http.StatusUnauthorized, response.Fail(response.CodeUnauthorized).WithMessage("请先登录"))
 	default:
 		// 默认服务器异常
 		slog.Error("[handler] 服务器异常",

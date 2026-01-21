@@ -39,11 +39,7 @@ func Initialization() error {
 
 // Execute 执行 Redis 任务
 func Execute[T any](fn func(conn *redis.Conn) (T, error)) (T, error) {
-	conn := client.Conn()
-	defer func() {
-		_ = conn.Close()
-	}()
-	return fn(conn)
+	return ExecuteClient(client, fn)
 }
 
 func ExecuteClient[T any](client *redis.Client, fn func(conn *redis.Conn) (T, error)) (T, error) {

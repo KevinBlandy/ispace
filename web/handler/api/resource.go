@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"io"
 	"ispace/common"
 	"ispace/common/constant"
 	"ispace/common/response"
@@ -149,14 +148,13 @@ func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
 	}
 
 	/*
-		TODO 待商榷
 		1. 直接 IO Gzip 文件，会导致不能正确处理 Range 请求，例如，会影响到视频文件播放的 Range 请求，且不支持缓存协商。
 		2. 使用 http.ServeContent 响应，可以正确处理 Range 和缓存协商，但是问题在于 磁盘文件已经是 gzip 格式，Range 本身没意义。
 	*/
 
-	//http.ServeContent(ctx.Writer, ctx.Request, resource.Title, stat.ModTime(), file)
+	http.ServeContent(ctx.Writer, ctx.Request, resource.Title, stat.ModTime(), file)
 
-	_, _ = io.Copy(ctx.Writer, file)
+	//_, _ = io.Copy(ctx.Writer, file)
 
 	ctx.Abort()
 	return nil, nil
@@ -322,8 +320,20 @@ func (r ResourceApi) UploadDir(ctx *gin.Context) (any, error) {
 	return response.Ok(nil), nil
 }
 
-// Download 下载资源文件
+// Download 下载资源
 func (r ResourceApi) Download(g *gin.Context) (any, error) {
+	ids := g.QueryArray("resourceId") // 可以有多个
+	if len(ids) == 0 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("下载资源不能为空"))
+	}
+	var resourceId = make([]int64, 0)
+	for _, v := range ids {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源 ID 错误"))
+		}
+		resourceId = append(resourceId, id)
+	}
 	return nil, nil
 }
 
