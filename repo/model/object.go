@@ -12,6 +12,17 @@ var (
 	ObjectCompressionBrotli ObjectCompression = "br"
 )
 
+type ObjectStatus string
+
+var (
+	// ObjectStatusOk 状态 OK
+	ObjectStatusOk ObjectStatus = "OK"
+	// ObjectStatusPendingReview 待审核
+	ObjectStatusPendingReview ObjectStatus = "PENDING_REVIEW"
+	// ObjectStatusDisabled 禁用
+	ObjectStatusDisabled ObjectStatus = "Disable"
+)
+
 // Object 对象
 type Object struct {
 	Id          int64             `gorm:"primaryKey"`
@@ -19,8 +30,10 @@ type Object struct {
 	Compression ObjectCompression // 压缩算法
 	Hash        string            `gorm:"index"` // Sha256 值
 	Size        int64             // 原始文件大小
+	FileSize    int64             // 实际文件大小
 	RefCount    uint64            // 引用数量
 	ContentType string            // 媒体类型
+	Status      ObjectStatus      // 对象状态
 	CreateTime  int64             // 创建时间
 	UpdateTime  int64             // 更新时间
 }

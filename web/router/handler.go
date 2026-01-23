@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"runtime/debug"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/render"
@@ -70,6 +71,7 @@ func errorHandle(err error, ctx *gin.Context) {
 		// 默认服务器异常
 		slog.Error("[handler] 服务器异常",
 			slog.String("err", err.Error()),
+			slog.String("stack", string(debug.Stack())),
 		)
 		serviceError = common.NewServiceError(
 			http.StatusInternalServerError,

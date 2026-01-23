@@ -1,0 +1,55 @@
+package api
+
+import (
+	"ispace/common/page"
+	"ispace/common/types"
+)
+
+// ManagerSignInRequest 管理员登录
+type ManagerSignInRequest struct {
+	Account  string `json:"account"`
+	Password string `json:"password"`
+}
+
+// MemberListRequest 会员列表查询
+type MemberListRequest struct {
+	Pager   *page.Pager `json:"-"`
+	Account string      `json:"account"` // 账户
+	Email   string      `json:"email"`   // 邮箱
+}
+
+// MemberListResponse 会员列表响应
+type MemberListResponse struct {
+	Id           int64  `json:"id,string"`
+	Avatar       string `json:"avatar"`
+	Account      string `json:"account"`
+	Email        string `json:"email"`
+	Enabled      bool   `json:"enabled"`
+	CreateTime   int64  `json:"createTime,string"`
+	UpdateTime   int64  `json:"updateTime,string"`
+	Resources    int64  `json:"resources"`           // 资源数量
+	ResourceSize int64  `json:"resourceSize,string"` // 资源大小
+}
+
+// MemberCreateRequest 创建会员
+type MemberCreateRequest struct {
+	Account  string `json:"account"`  // 账户
+	Password string `json:"password"` // 密码
+	Email    string `json:"email"`    // 邮箱
+	Enabled  bool   `json:"enabled"`  // 状态
+}
+
+// MemberUpdateRequest 会员更新
+type MemberUpdateRequest struct {
+	Id int64 `json:"-"`
+	// MemberCreateRequest
+	Account  string `json:"account"`  // 账户
+	Password string `json:"password"` // 密码
+	Email    string `json:"email"`    // 邮箱
+	Enabled  *bool  `json:"enabled"`  // 状态
+}
+
+// MemberDeleteRequest 会员删除
+type MemberDeleteRequest struct {
+	Id types.Int64Slice `json:"id"`
+}

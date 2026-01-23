@@ -14,10 +14,9 @@ import (
 	"ispace/common/types"
 	"ispace/common/util"
 	"ispace/db"
-	"ispace/repo"
 	"ispace/repo/model"
 	"ispace/store"
-	"ispace/web"
+	"ispace/web/handler/api"
 	"log/slog"
 	"mime"
 	"mime/multipart"
@@ -40,39 +39,40 @@ const sniffLen = 512
 // compressionThreshold 压缩阈值
 var compressionThreshold = int64(types.KB)
 
-type ResourceService struct{}
+type ResourceService struct {
+	objectService *ObjectService
+}
 
-func NewResourceService() *ResourceService {
-	return &ResourceService{}
+func NewResourceService(service *ObjectService) *ResourceService {
+	return &ResourceService{objectService: service}
 }
 
 // List 查询资源列表
-func (s *ResourceService) List(ctx context.Context, request *web.ResourceListApiRequest) ([]*web.ResourceListApiResponse, error) {
+func (s *ResourceService) List(ctx context.Context, request *api.ResourceListRequest) ([]*api.ResourceListResponse, error) {
 
-	var ret = make([]*web.ResourceListApiResponse, 0)
+	var ret = make([]*api.ResourceListResponse, 0)
 
 	params := []any{request.MemberId, request.ParentId}
 
 	statement := &strings.Builder{}
 	_, _ = statement.WriteString(`SELECT
-				id,
-				parent_id,
-				title,
-				dir,
-				create_time,
-				update_time,
-				(
-					CASE dir 
-						WHEN 1 THEN 0
-						WHEN 0 THEN (SELECT size from t_object WHERE id = object_id)
-					END
-				) size
+				t.id,
+				t.parent_id,
+				t.title,
+				t.dir,
+				t.create_time,
+				t.update_time,
+				-- 文件大小
+				t1.size size,
+				-- 文件状态
+				t1.status status
 			FROM
-				t_resource
+				t_resource t
+				LEFT JOIN t_object t1 ON t1.id = t.object_id
 			WHERE
-				member_id = ? 
+				t.member_id = ? 
 			AND 
-				parent_id = ?`)
+				t.parent_id = ?`)
 
 	// 条件
 	if request.Dir != nil {
@@ -92,7 +92,7 @@ func (s *ResourceService) List(ctx context.Context, request *web.ResourceListApi
 	defer util.SafeClose(rows)
 
 	for rows.Next() {
-		resource := &web.ResourceListApiResponse{}
+		resource := &api.ResourceListResponse{}
 		if err := session.ScanRows(rows, resource); err != nil {
 			return nil, err
 		}
@@ -107,6 +107,7 @@ func (s *ResourceService) Get(ctx context.Context, memberId, resourceId int64) (
 	Title       string                  // 文件标题
 	Compression model.ObjectCompression // 压缩方式
 	ContentType string                  // 文件类型
+	Status      model.ObjectStatus      // 文件状态
 	Path        string                  // 相对路径
 }, err error) {
 	row := db.Session(ctx).Raw(`
@@ -114,7 +115,8 @@ func (s *ResourceService) Get(ctx context.Context, memberId, resourceId int64) (
 				t.title,
 				t1.compression,
 				t1.content_type,
-				t1.path
+				t1.path,
+				t1.status
 			FROM
 				t_resource t
 				INNER JOIN t_object t1 ON t1.id = t.object_id
@@ -226,8 +228,8 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	hash := hex.EncodeToString(hasher.Sum(nil))
 
 	// 查询 Hash 是否存在
-	objectId, err := repo.DefaultObjectRepo.GetIdByHash(ctx, hash)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	objectId, err := s.objectService.Exists(ctx, "hash", hash)
+	if err != nil {
 		return err
 	}
 	if objectId > 0 {
@@ -257,7 +259,7 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	newFilePath := path.Join(path.Join(s.RandDir()...), id.UUID())
 
 	// 创建文件
-	newFile, err := store.DefaultStore().OpenFile(newFilePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.ModePerm)
+	newFile, err := store.DefaultStore().OpenFile(newFilePath, os.O_CREATE|os.O_EXCL|os.O_RDWR, os.ModePerm)
 	if err != nil {
 		return err
 	}
@@ -279,6 +281,12 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 		return err
 	}
 
+	// 查询文件状态
+	stat, err := newFile.Stat()
+	if err != nil {
+		return err
+	}
+
 	slog.InfoContext(ctx, "新文件",
 		slog.String("name", fileHeader.Filename),
 		slog.Int64("size", fileHeader.Size),
@@ -296,8 +304,10 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 		Compression: util.If(compress, model.ObjectCompressionGzip, model.ObjectCompressionNone),
 		Hash:        hash,
 		Size:        fileHeader.Size,
+		FileSize:    stat.Size(),
 		RefCount:    0,
 		ContentType: contentType,
+		Status:      model.ObjectStatusPendingReview, // 默认待审核状态
 		CreateTime:  now,
 		UpdateTime:  now,
 	}
@@ -323,7 +333,7 @@ func (s *ResourceService) RandDir() []string {
 }
 
 // Mkdir 创建文件夹
-func (s *ResourceService) Mkdir(ctx context.Context, request *web.ResourceMkdirRequest) error {
+func (s *ResourceService) Mkdir(ctx context.Context, request *api.ResourceMkdirRequest) error {
 
 	var resourceId = id.Next().Int64()
 
@@ -375,7 +385,7 @@ func (s *ResourceService) Mkdir(ctx context.Context, request *web.ResourceMkdirR
 }
 
 // Rename 重命名文件
-func (s *ResourceService) Rename(ctx context.Context, request *web.ResourceRenameRequest) error {
+func (s *ResourceService) Rename(ctx context.Context, request *api.ResourceRenameRequest) error {
 
 	// 查询资源所在目录
 	var parentId uint64
@@ -422,7 +432,7 @@ func (s *ResourceService) Rename(ctx context.Context, request *web.ResourceRenam
 }
 
 // Delete 删除资源
-func (s *ResourceService) Delete(ctx context.Context, request *web.ResourceDeleteRequest) error {
+func (s *ResourceService) Delete(ctx context.Context, request *api.ResourceDeleteRequest) error {
 
 	session := db.Session(ctx)
 
@@ -508,7 +518,7 @@ func (s *ResourceService) delete(ctx context.Context, resource *model.Resource) 
 }
 
 // Move 移动资源
-func (s *ResourceService) Move(ctx context.Context, request *web.ResourceMoveRequest) error {
+func (s *ResourceService) Move(ctx context.Context, request *api.ResourceMoveRequest) error {
 
 	session := db.Session(ctx)
 
@@ -626,7 +636,7 @@ func (s *ResourceService) Move(ctx context.Context, request *web.ResourceMoveReq
 }
 
 // Tree 查询完整的资源树
-func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*web.ResourceTreeApiResponse, error) {
+func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*api.ResourceTreeResponse, error) {
 	session := db.Session(ctx)
 	rows, err := session.Raw(`
 			SELECT
@@ -636,36 +646,33 @@ func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*web.Reso
 				t.dir,
 				t.create_time,
 				t.update_time,
-				(
-					CASE t.dir 
-						WHEN 1 THEN 0
-						WHEN 0 THEN (SELECT size from t_object WHERE id = object_id)
-					END
-				) size
+				-- 文件大小
+				t1.size size,
+				-- 文件状态
+				t1.status status
 			FROM
 				t_resource t
+				LEFT JOIN t_object t1 ON t1.id = t.object_id
 			WHERE
-				t.member_id = ?
+				t.member_id = 1
 			ORDER BY dir DESC, title ASC`, memberId).Rows()
-
 	if err != nil {
 		return nil, err
 	}
-
 	defer util.SafeClose(rows)
 
-	var resources = make(map[int64]*web.ResourceTreeApiResponse)
+	var resources = make(map[int64]*api.ResourceTreeResponse)
 
 	for rows.Next() {
-		resource := &web.ResourceListApiResponse{}
+		resource := &api.ResourceListResponse{}
 		if err := session.ScanRows(rows, resource); err != nil {
 			return nil, err
 		}
-		resources[resource.Id] = &web.ResourceTreeApiResponse{ResourceListApiResponse: *resource}
+		resources[resource.Id] = &api.ResourceTreeResponse{ResourceListResponse: *resource}
 	}
 
 	// 先查询根元素
-	var root = make([]*web.ResourceTreeApiResponse, 0)
+	var root = make([]*api.ResourceTreeResponse, 0)
 	for _, resource := range resources {
 		if resource.ParentId == model.DefaultResourceParentId {
 			root = append(root, resource)
@@ -674,9 +681,9 @@ func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*web.Reso
 	}
 
 	// 构建树结构
-	var subEntry func(*web.ResourceTreeApiResponse, map[int64]*web.ResourceTreeApiResponse)
+	var subEntry func(*api.ResourceTreeResponse, map[int64]*api.ResourceTreeResponse)
 
-	subEntry = func(resource *web.ResourceTreeApiResponse, resourceMap map[int64]*web.ResourceTreeApiResponse) {
+	subEntry = func(resource *api.ResourceTreeResponse, resourceMap map[int64]*api.ResourceTreeResponse) {
 		for _, entry := range resourceMap {
 			if entry.ParentId == resource.Id {
 				resource.Entries = append(resource.Entries, entry)
@@ -729,4 +736,4 @@ func (s *ResourceService) UniqueTitle(ctx context.Context, dir bool, title strin
 	return title, nil
 }
 
-var DefaultResourceService = NewResourceService()
+var DefaultResourceService = NewResourceService(DefaultObjectService)

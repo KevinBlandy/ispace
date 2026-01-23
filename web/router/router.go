@@ -8,7 +8,8 @@ import (
 	"ispace/web"
 	"ispace/web/filter"
 	"ispace/web/handler"
-	"ispace/web/handler/api"
+	"ispace/web/handler/api/manager"
+	"ispace/web/handler/api/member"
 	"net/http"
 	"os"
 
@@ -40,38 +41,51 @@ func New() http.Handler {
 	// ======================================================================
 	// Member Api 接口
 	// ======================================================================
-
 	// 登录
 	router.POST("/api/sign-in",
 		H(handler.DefaultCaptcha().Validate),
-		H(api.NewSignInApi().Serve),
+		H(member.DefaultSignInApi.Serve),
 	)
 
-	apiRouter := router.Group("/api",
+	memberApi := router.Group("/api",
 		H(filter.DefaultMemberAuthFilter().Serve), // 认证
 	)
 
 	// 文件 API 接口
 	{
-		apiRouter.GET("/resources/tree", H(api.DefaultResourceApi().Tree))             // 完整的文件树
-		apiRouter.GET("/resources", H(api.DefaultResourceApi().List))                  // 资源列表
-		apiRouter.GET("/resources/:id", H(api.DefaultResourceApi().Get))               // 读取资源
-		apiRouter.POST("/resources/upload", H(api.DefaultResourceApi().Upload))        // 上传单个资源
-		apiRouter.POST("/resources/upload/dir", H(api.DefaultResourceApi().UploadDir)) // 上传文件夹
-		apiRouter.POST("/resources/mkdir", H(api.DefaultResourceApi().MkDir))          // 创建目录
-		apiRouter.POST("/resources/:id/rename", H(api.DefaultResourceApi().Rename))    // 重命名资源
-		apiRouter.DELETE("/resources/delete", H(api.DefaultResourceApi().Delete))      // 删除资源
-		apiRouter.POST("/resources/move", H(api.DefaultResourceApi().Move))            // 移动资源
-		apiRouter.GET("/resources/download", H(api.DefaultResourceApi().Download))     // 下载资源
-		apiRouter.POST("/resources/unarchive", NoContent)                              // 解压资源
-		apiRouter.GET("/resources/search", NoContent)                                  // 搜索资源
-		apiRouter.POST("/resources/share", NoContent)                                  // 分享资源
-		apiRouter.GET("/resources/group", NoContent)                                   // 资源分组
+		memberApi.GET("/resources/tree", H(member.DefaultResourceApi().Tree))             // 完整的文件树
+		memberApi.GET("/resources", H(member.DefaultResourceApi().List))                  // 资源列表
+		memberApi.GET("/resources/:id", H(member.DefaultResourceApi().Get))               // 读取资源
+		memberApi.POST("/resources/upload", H(member.DefaultResourceApi().Upload))        // 上传单个资源
+		memberApi.POST("/resources/upload/dir", H(member.DefaultResourceApi().UploadDir)) // 上传文件夹
+		memberApi.POST("/resources/mkdir", H(member.DefaultResourceApi().MkDir))          // 创建目录
+		memberApi.POST("/resources/:id/rename", H(member.DefaultResourceApi().Rename))    // 重命名资源
+		memberApi.DELETE("/resources/delete", H(member.DefaultResourceApi().Delete))      // 删除资源
+		memberApi.POST("/resources/move", H(member.DefaultResourceApi().Move))            // 移动资源
+		memberApi.GET("/resources/download", H(member.DefaultResourceApi().Download))     // 下载资源
+		memberApi.POST("/resources/unarchive", NoContent)                                 // 解压资源
+		memberApi.GET("/resources/search", NoContent)                                     // 搜索资源
+		memberApi.POST("/resources/share", NoContent)                                     // 分享资源
+		memberApi.GET("/resources/group", NoContent)                                      // 资源分组
 	}
 
 	// ======================================================================
 	// Manager Api 接口
 	// ======================================================================
+	router.POST("/manager-api/sign-in",
+		//H(handler.DefaultCaptcha().Validate),
+		H(manager.DefaultSignInApi.Serve),
+	)
+
+	managerApi := router.Group("/manager-api")
+
+	// 会员管理
+	{
+		managerApi.GET("/members", H(manager.DefaultMemberApi.List))         // 会员列表
+		managerApi.POST("/members", H(manager.DefaultMemberApi.Create))      // 创建会员
+		managerApi.PATCH("/members/:id", H(manager.DefaultMemberApi.Update)) // 更新会员
+		managerApi.DELETE("/members", H(manager.DefaultMemberApi.Delete))    // 删除会员
+	}
 
 	// 静态资源在最后
 	router.Use(handler.NewFsHandler(

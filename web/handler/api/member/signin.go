@@ -1,4 +1,4 @@
-package api
+package member
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"ispace/common/response"
 	"ispace/db"
 	"ispace/repo/model"
-	"ispace/web"
+	"ispace/web/handler/api"
 	"ispace/web/service"
 	"net/http"
 	"time"
@@ -14,21 +14,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type SignInApi struct{}
-
-func NewSignInApi() *SignInApi {
-	return &SignInApi{}
+type SignInApi struct {
+	memberService *service.MemberService
 }
 
-func (s SignInApi) Serve(ctx *gin.Context) (any, error) {
+func NewSignInApi(memberService *service.MemberService) *SignInApi {
+	return &SignInApi{memberService: memberService}
+}
 
-	var request = &web.SignInApiRequest{}
+func (s *SignInApi) Serve(ctx *gin.Context) (any, error) {
+
+	var request = &api.MemberSignInRequest{}
 	if err := ctx.ShouldBindBodyWithJSON(request); err != nil {
 		return nil, err
 	}
 
 	member, err := db.Transaction(ctx.Request.Context(), func(ctx context.Context) (*model.Member, error) {
-		return service.DefaultMemberService.Login(ctx, request)
+		return s.memberService.Login(ctx, request)
 	}, db.TxReadOnly)
 
 	if err != nil {
@@ -51,3 +53,5 @@ func (s SignInApi) Serve(ctx *gin.Context) (any, error) {
 	})
 	return response.Ok(nil), nil
 }
+
+var DefaultSignInApi = NewSignInApi(service.DefaultMemberService)

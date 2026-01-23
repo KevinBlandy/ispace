@@ -1,4 +1,4 @@
-package api
+package member
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"ispace/db"
 	"ispace/repo/model"
 	"ispace/store"
-	"ispace/web"
+	"ispace/web/handler/api"
 	"ispace/web/service"
 	"mime"
 	"mime/multipart"
@@ -31,7 +31,7 @@ func NewResourceApi() *ResourceApi {
 // Tree 完整的文件树
 func (r ResourceApi) Tree(ctx *gin.Context) (any, error) {
 	memberId := ctx.GetInt64(constant.CtxKeySubject)
-	result, err := db.Transaction(ctx.Request.Context(), func(ctx context.Context) ([]*web.ResourceTreeApiResponse, error) {
+	result, err := db.Transaction(ctx.Request.Context(), func(ctx context.Context) ([]*api.ResourceTreeResponse, error) {
 		return service.DefaultResourceService.Tree(ctx, memberId)
 	}, db.TxReadOnly)
 	if err != nil {
@@ -48,13 +48,13 @@ func (r ResourceApi) List(ctx *gin.Context) (any, error) {
 		parentId = model.DefaultResourceParentId
 	}
 
-	request := &web.ResourceListApiRequest{
+	request := &api.ResourceListRequest{
 		MemberId: ctx.GetInt64(constant.CtxKeySubject),
 		ParentId: parentId,
 		Dir:      util.BoolQuery(ctx.GetQuery("dir")),
 	}
 
-	result, err := db.Transaction(ctx.Request.Context(), func(ctx context.Context) ([]*web.ResourceListApiResponse, error) {
+	result, err := db.Transaction(ctx.Request.Context(), func(ctx context.Context) ([]*api.ResourceListResponse, error) {
 		return service.DefaultResourceService.List(ctx, request)
 	}, db.TxReadOnly)
 	if err != nil {
@@ -116,12 +116,18 @@ func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
 		Title       string
 		Compression model.ObjectCompression
 		ContentType string
+		Status      model.ObjectStatus
 		Path        string
 	}, error) {
 		return service.DefaultResourceService.Get(ctx, memberId, resourceId)
 	}, db.TxReadOnly)
 	if err != nil {
 		return nil, err
+	}
+
+	// 资源状态判断
+	if resource.Status == model.ObjectStatusDisabled {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("该资源已被屏蔽"))
 	}
 
 	// 打开资源文件
@@ -162,7 +168,7 @@ func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
 
 // MkDir 创建文件夹
 func (r ResourceApi) MkDir(ctx *gin.Context) (any, error) {
-	request := &web.ResourceMkdirRequest{MemberId: ctx.GetInt64(constant.CtxKeySubject)}
+	request := &api.ResourceMkdirRequest{MemberId: ctx.GetInt64(constant.CtxKeySubject)}
 	if err := ctx.ShouldBindJSON(request); err != nil {
 		return nil, err
 	}
@@ -182,7 +188,7 @@ func (r ResourceApi) Rename(ctx *gin.Context) (any, error) {
 	if err != nil {
 		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
 	}
-	var request = &web.ResourceRenameRequest{
+	var request = &api.ResourceRenameRequest{
 		Id:       id,
 		MemberId: ctx.GetInt64(constant.CtxKeySubject),
 	}
@@ -200,7 +206,7 @@ func (r ResourceApi) Rename(ctx *gin.Context) (any, error) {
 
 // Delete 删除资源
 func (r ResourceApi) Delete(ctx *gin.Context) (any, error) {
-	request := &web.ResourceDeleteRequest{
+	request := &api.ResourceDeleteRequest{
 		MemberId: ctx.GetInt64(constant.CtxKeySubject),
 	}
 	if err := ctx.ShouldBindJSON(request); err != nil {
@@ -217,7 +223,7 @@ func (r ResourceApi) Delete(ctx *gin.Context) (any, error) {
 
 // Move 移动资源
 func (r ResourceApi) Move(ctx *gin.Context) (any, error) {
-	request := &web.ResourceMoveRequest{
+	request := &api.ResourceMoveRequest{
 		MemberId: ctx.GetInt64(constant.CtxKeySubject),
 	}
 

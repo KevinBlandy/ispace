@@ -15,6 +15,7 @@ func Initialization() error {
 	return db.Get().AutoMigrate(
 		&model.Admin{},
 		&model.Member{},
+		&model.MemberDeletedQueue{},
 		&model.Object{},
 		&model.Resource{},
 		&model.Share{},
