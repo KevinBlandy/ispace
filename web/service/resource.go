@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"ispace/common"
+	"ispace/common/constant"
 	"ispace/common/id"
 	"ispace/common/response"
 	"ispace/common/types"
@@ -334,6 +335,12 @@ func (s *ResourceService) RandDir() []string {
 
 // Mkdir 创建文件夹
 func (s *ResourceService) Mkdir(ctx context.Context, request *api.ResourceMkdirRequest) error {
+	_, err := s.mkdir(ctx, request)
+	return err
+}
+
+// mkdir 创建文件夹
+func (s *ResourceService) mkdir(ctx context.Context, request *api.ResourceMkdirRequest) (*model.Resource, error) {
 
 	var resourceId = id.Next().Int64()
 
@@ -344,15 +351,15 @@ func (s *ResourceService) Mkdir(ctx context.Context, request *api.ResourceMkdirR
 
 	if request.ParentId != model.DefaultResourceParentId {
 		// 确定父目录存在
-		dir, err := gorm.G[*model.Resource](db.Session(ctx).Clauses(clause.Locking{Strength: "UPDATE"})). // for update
-															Select("id", "dir", "path", "depth").
-															Where("id = ? AND member_id = ?", request.ParentId, request.MemberId).
-															Take(ctx)
+		dir, err := gorm.G[*model.Resource](db.Session(ctx)). // for update
+									Select("id", "dir", "path", "depth").
+									Where("id = ? AND member_id = ?", request.ParentId, request.MemberId).
+									Take(ctx)
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
+			return nil, err
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("父目录不存在"))
+			return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("父目录不存在"))
 		}
 
 		// 父目录存在，则拼接
@@ -364,13 +371,12 @@ func (s *ResourceService) Mkdir(ctx context.Context, request *api.ResourceMkdirR
 	var err error
 	request.Title, err = s.UniqueTitle(ctx, true, request.Title, resourceId, request.MemberId, request.ParentId)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// 保存
 	now := time.Now().UnixMilli()
-
-	return gorm.G[model.Resource](db.Session(ctx)).Create(ctx, &model.Resource{
+	r := &model.Resource{
 		Id:         resourceId,
 		MemberId:   request.MemberId,
 		ObjectId:   model.DefaultResourceObjectId,
@@ -381,7 +387,8 @@ func (s *ResourceService) Mkdir(ctx context.Context, request *api.ResourceMkdirR
 		Depth:      newDepth,
 		CreateTime: now,
 		UpdateTime: now,
-	})
+	}
+	return r, gorm.G[model.Resource](db.Session(ctx)).Create(ctx, r)
 }
 
 // Rename 重命名文件
@@ -652,7 +659,7 @@ func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*api.Reso
 				t1.status status
 			FROM
 				t_resource t
-				LEFT JOIN t_object t1 ON t1.id = t.object_id
+				LEFT JOIN t_object t1 ON t1.id = t.object_id AND t.dir = 0
 			WHERE
 				t.member_id = 1
 			ORDER BY dir DESC, title ASC`, memberId).Rows()
@@ -698,7 +705,6 @@ func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*api.Reso
 	}
 	for _, resource := range root {
 		subEntry(resource, resources)
-
 	}
 	return root, nil
 }
@@ -734,6 +740,65 @@ func (s *ResourceService) UniqueTitle(ctx context.Context, dir bool, title strin
 	}
 
 	return title, nil
+}
+
+// UploadDir 上传文件夹
+func (s *ResourceService) UploadDir(ctx context.Context, memberId int64, parentId int64, dirs map[string][]*multipart.FileHeader) error {
+	for k, v := range dirs {
+		if err := s.uploadDir(ctx, memberId, parentId, k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// uploadDir 上传文件
+func (s *ResourceService) uploadDir(ctx context.Context, memberId int64, parentId int64, dirTitle string, files []*multipart.FileHeader) error {
+	// 创建根目录
+
+	var err error
+
+	root, err := s.mkdir(ctx, &api.ResourceMkdirRequest{
+		MemberId: memberId,
+		ParentId: parentId,
+		Title:    dirTitle,
+	})
+	if err != nil {
+		return err
+	}
+
+	// 创建目录 & 文件
+	for _, file := range files {
+
+		// 父级目录
+		var parent = root
+
+		// 拆分完整路径
+		sections := strings.Split(file.Filename, constant.Slash)
+
+		for i, section := range sections {
+			if i == len(sections)-1 {
+				// 文件
+				file.Filename = section // 重置文件名称
+				if err := s.Upload(ctx, memberId, parent.Id, file); err != nil {
+					return err
+				}
+			} else {
+				// 目录
+				// TODO 如果目录已存在，则应该直接返回
+				parent, err = s.mkdir(ctx, &api.ResourceMkdirRequest{
+					MemberId: memberId,
+					ParentId: parent.Id,
+					Title:    section,
+				})
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 var DefaultResourceService = NewResourceService(DefaultObjectService)

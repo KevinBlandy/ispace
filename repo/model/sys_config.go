@@ -23,7 +23,7 @@ var (
 	SysConfigValueTypeNumber   = SysConfigValueType("number")   // 数值
 	SysConfigValueTypeDatetime = SysConfigValueType("datetime") // 日期
 	SysConfigValueTypeDuration = SysConfigValueType("duration") // 时长
-	SysConfigValueTypeBool     = SysConfigValueType("bool")     // 开关
+	SysConfigValueTypeSwitch   = SysConfigValueType("switch")   // 开关
 	SysConfigValueTypeJson     = SysConfigValueType("json")     // json 配置
 )
 

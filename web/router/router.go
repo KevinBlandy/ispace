@@ -41,15 +41,16 @@ func New() http.Handler {
 	// ======================================================================
 	// Member Api 接口
 	// ======================================================================
+
+	memberApi := router.Group("/api")
+
 	// 登录
-	router.POST("/api/sign-in",
-		H(handler.DefaultCaptcha().Validate),
+	memberApi.POST("/sign-in",
+		H(handler.DefaultCaptcha().Validate), // 验证码
 		H(member.DefaultSignInApi.Serve),
 	)
 
-	memberApi := router.Group("/api",
-		H(filter.DefaultMemberAuthFilter().Serve), // 认证
-	)
+	memberApi.Use(H(filter.DefaultMemberAuthFilter().Serve)) // 认证
 
 	// 文件 API 接口
 	{
@@ -69,15 +70,22 @@ func New() http.Handler {
 		memberApi.GET("/resources/group", NoContent)                                      // 资源分组
 	}
 
+	// 文件 Api 接口
+	{
+		//memberApi.GET("/objects/sha256/:hash", H())
+	}
+
 	// ======================================================================
 	// Manager Api 接口
 	// ======================================================================
-	router.POST("/manager-api/sign-in",
+	managerApi := router.Group("/manager-api")
+
+	managerApi.POST("/sign-in",
 		//H(handler.DefaultCaptcha().Validate),
-		H(manager.DefaultSignInApi.Serve),
+		H(member.DefaultSignInApi.Serve),
 	)
 
-	managerApi := router.Group("/manager-api")
+	managerApi.Use(H(filter.DefaultManagerAuthFilter().Serve))
 
 	// 会员管理
 	{
@@ -85,6 +93,13 @@ func New() http.Handler {
 		managerApi.POST("/members", H(manager.DefaultMemberApi.Create))      // 创建会员
 		managerApi.PATCH("/members/:id", H(manager.DefaultMemberApi.Update)) // 更新会员
 		managerApi.DELETE("/members", H(manager.DefaultMemberApi.Delete))    // 删除会员
+	}
+
+	// 资源管理
+	{
+		managerApi.GET("/objects", H(manager.DefaultObjectApi.List))         // 资源列表
+		managerApi.PATCH("/objects/:id", H(manager.DefaultObjectApi.Update)) // 更新资源
+		managerApi.DELETE("/objects", H(manager.DefaultObjectApi.Delete))    // 删除资源
 	}
 
 	// 静态资源在最后

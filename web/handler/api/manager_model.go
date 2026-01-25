@@ -3,6 +3,7 @@ package api
 import (
 	"ispace/common/page"
 	"ispace/common/types"
+	"ispace/repo/model"
 )
 
 // ManagerSignInRequest 管理员登录
@@ -51,5 +52,36 @@ type MemberUpdateRequest struct {
 
 // MemberDeleteRequest 会员删除
 type MemberDeleteRequest struct {
+	Id types.Int64Slice `json:"id"`
+}
+
+// ObjectListRequest 存储对象列表查询
+type ObjectListRequest struct {
+	Pager  *page.Pager `json:"-"`
+	Status string      `json:"status"` // 状态
+}
+
+// ObjectListResponse 存储对象列表响应
+type ObjectListResponse struct {
+	Id          int64                   `json:"id,string"`
+	Path        string                  `json:"path"`              // 资源在本地的存储路径
+	Compression model.ObjectCompression `json:"compression"`       // 压缩算法
+	Hash        string                  `json:"hash"`              // Sha256 值
+	Size        int64                   `json:"size"`              // 原始文件大小
+	FileSize    int64                   `json:"fileSize"`          // 实际文件大小
+	RefCount    uint64                  `json:"refCount"`          // 引用数量
+	ContentType string                  `json:"contentType"`       // 媒体类型
+	Status      model.ObjectStatus      `json:"status"`            // 对象状态
+	CreateTime  int64                   `json:"createTime,string"` // 创建时间
+	UpdateTime  int64                   `json:"updateTime,string"` // 更新时间
+}
+
+// ObjectUpdateRequest 更新状态
+type ObjectUpdateRequest struct {
+	Id     int64              `json:"-"`
+	Status model.ObjectStatus `json:"status"`
+}
+
+type ObjectDeleteRequest struct {
 	Id types.Int64Slice `json:"id"`
 }

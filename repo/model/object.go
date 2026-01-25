@@ -20,7 +20,7 @@ var (
 	// ObjectStatusPendingReview 待审核
 	ObjectStatusPendingReview ObjectStatus = "PENDING_REVIEW"
 	// ObjectStatusDisabled 禁用
-	ObjectStatusDisabled ObjectStatus = "Disable"
+	ObjectStatusDisabled ObjectStatus = "DISABLED"
 )
 
 // Object 对象

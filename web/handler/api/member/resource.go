@@ -2,6 +2,7 @@ package member
 
 import (
 	"context"
+	"errors"
 	"ispace/common"
 	"ispace/common/constant"
 	"ispace/common/response"
@@ -19,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type ResourceApi struct {
@@ -122,6 +124,9 @@ func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
 		return service.DefaultResourceService.Get(ctx, memberId, resourceId)
 	}, db.TxReadOnly)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			err = common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("资源不存在"))
+		}
 		return nil, err
 	}
 
@@ -143,7 +148,7 @@ func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
 	}
 
 	// 响应客户端
-	ctx.Header("Content-Length", strconv.FormatInt(stat.Size(), 10))
+	//ctx.Header("Content-Length", strconv.FormatInt(stat.Size(), 10))
 	ctx.Header("Content-Type", resource.ContentType)
 	if resource.Compression != model.ObjectCompressionNone {
 		ctx.Header("Content-Encoding", string(resource.Compression))
@@ -240,9 +245,9 @@ func (r ResourceApi) Move(ctx *gin.Context) (any, error) {
 }
 
 // UploadDir 上传文件夹
-func (r ResourceApi) UploadDir(ctx *gin.Context) (any, error) {
-	defer util.SafeClose(ctx.Request.Body)
-	form, err := ctx.MultipartForm()
+func (r ResourceApi) UploadDir(c *gin.Context) (any, error) {
+	defer util.SafeClose(c.Request.Body)
+	form, err := c.MultipartForm()
 	if err != nil {
 		return nil, err
 	}
@@ -254,13 +259,13 @@ func (r ResourceApi) UploadDir(ctx *gin.Context) (any, error) {
 	// 上传目录
 	var parentId = model.DefaultResourceParentId
 
-	parentId, _ = strconv.ParseInt(ctx.Query("parentId"), 10, 64)
+	parentId, _ = strconv.ParseInt(c.Query("parentId"), 10, 64)
 	if parentId <= 0 {
 		parentId = model.DefaultResourceParentId
 	}
 
 	// 会员 ID
-	_ = ctx.GetInt64(constant.CtxKeySubject)
+	memberId := c.GetInt64(constant.CtxKeySubject)
 
 	// 目录 & 文件
 	var dirs = make(map[string][]*multipart.FileHeader)
@@ -270,6 +275,7 @@ func (r ResourceApi) UploadDir(ctx *gin.Context) (any, error) {
 		// rootDir 根目录
 		var commonRoot = ""
 
+		// 目录下的文件列表
 		var fileSlice = make([]*multipart.FileHeader, 0)
 
 		for _, file := range files {
@@ -295,13 +301,15 @@ func (r ResourceApi) UploadDir(ctx *gin.Context) (any, error) {
 
 			// 当前根目录
 			currentRoot := parts[0]
+
+			// 确定所有文件是否相同的公共目录
 			if commonRoot == "" {
 				commonRoot = currentRoot
+				if strings.TrimSpace(commonRoot) == "" {
+					return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("目录名称不能为空"))
+				}
 			} else if commonRoot != currentRoot {
 				return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("不能包含多个根目录"))
-			}
-			if strings.TrimSpace(commonRoot) == "" {
-				return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("目录名称不能为空"))
 			}
 
 			// 去掉公共目录
@@ -321,8 +329,12 @@ func (r ResourceApi) UploadDir(ctx *gin.Context) (any, error) {
 		dirs[commonRoot] = fileSlice
 	}
 
-	// TODO 执行文件夹上传
-
+	err = db.TransactionWithOutResult(c.Request.Context(), func(ctx context.Context) error {
+		return service.DefaultResourceService.UploadDir(ctx, memberId, parentId, dirs)
+	})
+	if err != nil {
+		return nil, err
+	}
 	return response.Ok(nil), nil
 }
 
@@ -340,6 +352,9 @@ func (r ResourceApi) Download(g *gin.Context) (any, error) {
 		}
 		resourceId = append(resourceId, id)
 	}
+
+	// TODO
+
 	return nil, nil
 }
 
