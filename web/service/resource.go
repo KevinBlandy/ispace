@@ -754,10 +754,9 @@ func (s *ResourceService) UploadDir(ctx context.Context, memberId int64, parentI
 
 // uploadDir 上传文件
 func (s *ResourceService) uploadDir(ctx context.Context, memberId int64, parentId int64, dirTitle string, files []*multipart.FileHeader) error {
+
 	// 创建根目录
-
 	var err error
-
 	root, err := s.mkdir(ctx, &api.ResourceMkdirRequest{
 		MemberId: memberId,
 		ParentId: parentId,
@@ -766,6 +765,8 @@ func (s *ResourceService) uploadDir(ctx context.Context, memberId int64, parentI
 	if err != nil {
 		return err
 	}
+
+	session := db.Session(ctx)
 
 	// 创建目录 & 文件
 	for _, file := range files {
@@ -785,14 +786,26 @@ func (s *ResourceService) uploadDir(ctx context.Context, memberId int64, parentI
 				}
 			} else {
 				// 目录
-				// TODO 如果目录已存在，则应该直接返回
-				parent, err = s.mkdir(ctx, &api.ResourceMkdirRequest{
-					MemberId: memberId,
-					ParentId: parent.Id,
-					Title:    section,
-				})
-				if err != nil {
+				existsParent, err := gorm.G[model.Resource](session).Select("id").
+					Where("member_id = ? AND parent_id = ? AND title = ?", memberId, parent.Id, section).
+					Take(ctx)
+
+				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 					return err
+				}
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					// 父不存在，创建
+					parent, err = s.mkdir(ctx, &api.ResourceMkdirRequest{
+						MemberId: memberId,
+						ParentId: parent.Id,
+						Title:    section,
+					})
+					if err != nil {
+						return err
+					}
+				} else {
+					// 父目录存在
+					parent = &existsParent
 				}
 			}
 		}
