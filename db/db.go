@@ -18,6 +18,17 @@ var db *gorm.DB
 // Initialization 初始化数据源
 func Initialization() (err error) {
 
+	//logger.RecorderParamsFilter = func(ctx context.Context, sql string, params ...interface{}) (string, []interface{}) {
+	//	sql = strings.NewReplacer(
+	//		"\r\n", " ",
+	//		"\n", " ",
+	//		"\t", " ",
+	//	).Replace(sql)
+	//
+	//	// 可选：压缩多余空格
+	//	return strings.Join(strings.Fields(sql), " "), params
+	//}
+
 	db, err = gorm.Open(sqlite.Open(*config.DB), &gorm.Config{
 		Logger: logger.NewSlogLogger(slog.Default(), logger.Config{
 			SlowThreshold:             time.Second * 2,
