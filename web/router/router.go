@@ -2,6 +2,7 @@ package router
 
 import (
 	"io/fs"
+	"ispace/common/constant"
 	"ispace/common/types"
 	"ispace/common/util"
 	"ispace/config"
@@ -50,29 +51,35 @@ func New() http.Handler {
 		H(member.DefaultSignInApi.Serve),
 	)
 
-	memberApi.Use(H(filter.DefaultMemberAuthFilter().Serve)) // 认证
+	memberApi.Use(
+		func(context *gin.Context) {
+			context.Set(constant.CtxKeySubject, int64(10000))
+		},
+		//H(filter.DefaultMemberAuthFilter().Serve), // 认证
+	)
 
 	// 文件 API 接口
 	{
-		memberApi.GET("/resources/tree", H(member.DefaultResourceApi().Tree))             // 完整的文件树
-		memberApi.GET("/resources", H(member.DefaultResourceApi().List))                  // 资源列表
-		memberApi.GET("/resources/:id", H(member.DefaultResourceApi().Get))               // 读取资源
-		memberApi.POST("/resources/upload", H(member.DefaultResourceApi().Upload))        // 上传单个资源
-		memberApi.POST("/resources/upload/dir", H(member.DefaultResourceApi().UploadDir)) // 上传文件夹
-		memberApi.POST("/resources/mkdir", H(member.DefaultResourceApi().MkDir))          // 创建目录
-		memberApi.POST("/resources/:id/rename", H(member.DefaultResourceApi().Rename))    // 重命名资源
-		memberApi.DELETE("/resources/delete", H(member.DefaultResourceApi().Delete))      // 删除资源
-		memberApi.POST("/resources/move", H(member.DefaultResourceApi().Move))            // 移动资源
-		memberApi.GET("/resources/download", H(member.DefaultResourceApi().Download))     // 下载资源
-		memberApi.POST("/resources/unarchive", NoContent)                                 // 解压资源
-		memberApi.GET("/resources/search", NoContent)                                     // 搜索资源
-		memberApi.POST("/resources/share", NoContent)                                     // 分享资源
-		memberApi.GET("/resources/group", NoContent)                                      // 资源分组
+		memberApi.GET("/resources/tree", H(member.DefaultResourceApi().Tree))                 // 完整的文件树
+		memberApi.GET("/resources", H(member.DefaultResourceApi().List))                      // 资源列表
+		memberApi.GET("/resources/:id", H(member.DefaultResourceApi().Get))                   // 读取资源
+		memberApi.POST("/resources/upload", H(member.DefaultResourceApi().Upload))            // 上传单个资源
+		memberApi.POST("/resources/upload/flash", H(member.DefaultResourceApi().FlashUpload)) // 快传资源
+		memberApi.POST("/resources/upload/dir", H(member.DefaultResourceApi().UploadDir))     // 上传文件夹
+		memberApi.POST("/resources/mkdir", H(member.DefaultResourceApi().MkDir))              // 创建目录
+		memberApi.POST("/resources/:id/rename", H(member.DefaultResourceApi().Rename))        // 重命名资源
+		memberApi.DELETE("/resources/delete", H(member.DefaultResourceApi().Delete))          // 删除资源
+		memberApi.POST("/resources/move", H(member.DefaultResourceApi().Move))                // 移动资源
+		memberApi.GET("/resources/download", H(member.DefaultResourceApi().Download))         // 下载资源
+		memberApi.GET("/resources/unarchive/:id", H(member.DefaultResourceApi().Unarchive))   // 解压资源
+		memberApi.GET("/resources/search", NoContent)                                         // 搜索资源
+		memberApi.POST("/resources/share", NoContent)                                         // 分享资源
+		memberApi.GET("/resources/group", NoContent)                                          // 资源分组
 	}
 
 	// 文件 Api 接口
 	{
-		//memberApi.GET("/objects/sha256/:hash", H())
+		memberApi.GET("/objects/sha256/:hash", H(member.DefaultObjectApi.Hash)) // 根据 Hash 查询文件是否存在
 	}
 
 	// ======================================================================

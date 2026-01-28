@@ -15,6 +15,7 @@ type MemberSignInRequest struct {
 type ResourceListRequest struct {
 	MemberId int64
 	ParentId int64
+	Keywords string
 	Dir      *bool
 }
 
@@ -61,4 +62,24 @@ type ResourceMoveRequest struct {
 	MemberId int64
 	Id       types.Int64Slice `json:"id,string"`       // From 资源 Id
 	ParentId int64            `json:"parentId,string"` // 目标 ID
+}
+
+// ObjectHashResponse 对象的 Hash 查询结果
+type ObjectHashResponse struct {
+	Hit bool `json:"hit"` // 是否命中
+}
+
+// ResourceFlashUploadRequest ⚡️传请求
+type ResourceFlashUploadRequest struct {
+	Title string `json:"title"` // 资源标题
+	Hash  string `json:"hash"`  // 资源 Hash
+}
+
+// ResourceUnarchiveResponse 文件解压响应
+type ResourceUnarchiveResponse struct {
+	File    string                       `json:"file"`        // 完整的相对文件路径
+	Title   string                       `json:"title"`       // 文件名称
+	Dir     bool                         `json:"dir"`         // 是否是目录
+	Size    uint64                       `json:"size,string"` // 文件大小
+	Entries []*ResourceUnarchiveResponse `json:"entries"`     // 子项目
 }

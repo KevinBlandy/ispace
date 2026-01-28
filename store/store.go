@@ -34,6 +34,10 @@ func (s *Store) OpenFile(name string, flag int, perm os.FileMode) (*os.File, err
 }
 
 func New(dir string) (*Store, error) {
+	// 直接初始化目录
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil && !os.IsExist(err) {
+		return nil, err
+	}
 	root, err := os.OpenRoot(dir)
 	if err != nil {
 		return nil, err

@@ -1,8 +1,11 @@
 package member
 
 import (
+	"archive/zip"
+	"compress/gzip"
 	"context"
 	"errors"
+	"io"
 	"ispace/common"
 	"ispace/common/constant"
 	"ispace/common/response"
@@ -12,9 +15,12 @@ import (
 	"ispace/store"
 	"ispace/web/handler/api"
 	"ispace/web/service"
+	"log/slog"
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,6 +60,7 @@ func (r ResourceApi) List(ctx *gin.Context) (any, error) {
 		MemberId: ctx.GetInt64(constant.CtxKeySubject),
 		ParentId: parentId,
 		Dir:      util.BoolQuery(ctx.GetQuery("dir")),
+		Keywords: ctx.Query("keywords"),
 	}
 
 	result, err := db.Transaction(ctx.Request.Context(), func(ctx context.Context) ([]*api.ResourceListResponse, error) {
@@ -338,6 +345,26 @@ func (r ResourceApi) UploadDir(c *gin.Context) (any, error) {
 	return response.Ok(nil), nil
 }
 
+// FlashUpload ⚡️秒传
+func (r ResourceApi) FlashUpload(g *gin.Context) (any, error) {
+	var request = &api.ResourceFlashUploadRequest{}
+	if err := g.ShouldBindJSON(request); err != nil {
+		return nil, err
+	}
+	memberId := g.GetInt64(constant.CtxKeySubject)
+	parentId, err := strconv.ParseInt(g.Query("parentId"), 10, 64)
+	if err != nil || parentId < 0 {
+		parentId = model.DefaultResourceParentId
+	}
+	err = db.TransactionWithOutResult(g.Request.Context(), func(ctx context.Context) error {
+		return service.DefaultResourceService.FlashUpload(ctx, request, memberId, parentId)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(nil), nil
+}
+
 // Download 下载资源
 func (r ResourceApi) Download(g *gin.Context) (any, error) {
 	ids := g.QueryArray("resourceId") // 可以有多个
@@ -348,14 +375,201 @@ func (r ResourceApi) Download(g *gin.Context) (any, error) {
 	for _, v := range ids {
 		id, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
-			return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源 ID 错误"))
+			return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
 		}
 		resourceId = append(resourceId, id)
 	}
 
-	// TODO
+	// TODO 下载
 
 	return nil, nil
+}
+
+// Unarchive 在线解压资源
+func (r ResourceApi) Unarchive(g *gin.Context) (any, error) {
+	resourceId, _ := strconv.ParseInt(g.Param("id"), 10, 64)
+	if resourceId < 1 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
+	}
+
+	// 检索资源
+	resource, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (struct {
+		Title       string
+		Compression model.ObjectCompression
+		ContentType string
+		Status      model.ObjectStatus
+		Path        string
+	}, error) {
+		return service.DefaultResourceService.Get(ctx, g.GetInt64(constant.CtxKeySubject), resourceId)
+	}, db.TxReadOnly)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			err = common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("资源不存在"))
+		}
+		return nil, err
+	}
+	// 资源状态判断
+	if resource.Status == model.ObjectStatusDisabled {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("该资源已被屏蔽"))
+	}
+	// 必须是 zip 文件
+	if !strings.HasPrefix(resource.ContentType, "application/zip") {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("不支持的压缩格式"))
+	}
+
+	// 读文件
+	objectFile, err := store.DefaultStore().Open(resource.Path)
+	if err != nil {
+		return nil, err
+	}
+	defer util.SafeClose(objectFile)
+
+	// 文件本身是否经过了压缩存储
+	switch resource.Compression {
+	case model.ObjectCompressionNone:
+	case model.ObjectCompressionGzip:
+		// 创建临时文件
+		tmpFile, err := os.CreateTemp("", strconv.FormatInt(resourceId, 10))
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			if err := os.Remove(tmpFile.Name()); err != nil {
+				slog.ErrorContext(g.Request.Context(), "临时文件删除异常", slog.String("err", err.Error()))
+			}
+		}()
+		defer util.SafeClose(tmpFile)
+		gzipReader, err := gzip.NewReader(objectFile)
+		if err != nil {
+			return nil, err
+		}
+		defer util.SafeClose(gzipReader)
+		if _, err := io.Copy(tmpFile, gzipReader); err != nil {
+			return nil, err
+		}
+		objectFile = tmpFile
+	default:
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("未实现的压缩格式"))
+	}
+
+	stat, err := objectFile.Stat()
+	if err != nil {
+		return nil, err
+	}
+	zipReader, err := zip.NewReader(objectFile, stat.Size())
+	if err != nil {
+		return nil, err
+	}
+
+	file := strings.TrimSpace(g.Query("file"))
+
+	// 返回树结构
+	if file == "" {
+		return response.Ok(r.zipTree(zipReader)), nil
+	}
+
+	// 查询某个文件
+	for _, f := range zipReader.File {
+		if f.Name == file {
+			err := func(f *zip.File) error {
+				contentType := mime.TypeByExtension(filepath.Ext(f.Name))
+				if contentType == "" {
+					contentType = "application/octet-stream"
+				}
+
+				g.Header("Content-Type", contentType)
+				g.Header("Content-Length", strconv.FormatUint(f.UncompressedSize64, 10))
+				download := util.BoolQuery(g.GetQuery("download"))
+				if download != nil && *download {
+					g.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(f.Name)}))
+				}
+				fileReader, err := f.Open()
+				if err != nil {
+					return err
+				}
+				defer util.SafeClose(fileReader)
+
+				_, _ = io.Copy(g.Writer, fileReader)
+
+				//http.ServeContent(g.Writer, g.Request, filepath.Base(f.Name), f.Modified, fileReader)
+				g.Abort()
+				return nil
+			}(f)
+
+			if err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}
+	}
+	return response.Fail(response.CodeBadRequest).WithMessage("文件 " + file + " 不存在"), nil
+}
+
+// zipTree 读取 zip 文件并将其转换为树形结构
+// gen by Gemini
+func (r ResourceApi) zipTree(z *zip.Reader) []*api.ResourceUnarchiveResponse {
+
+	var rootEntries []*api.ResourceUnarchiveResponse
+	// 用于存放已创建的目录节点，Key 为完整路径 File
+	nodesMap := make(map[string]*api.ResourceUnarchiveResponse)
+
+	for _, f := range z.File {
+		// 1. 标准化路径并去除末尾斜杠
+		fullPath := strings.Trim(filepath.ToSlash(f.Name), "/")
+		if fullPath == "" {
+			continue
+		}
+
+		parts := strings.Split(fullPath, "/")
+		var currentPath string
+
+		// 2. 逐层处理路径
+		for i, part := range parts {
+			parentPath := currentPath
+			if currentPath == "" {
+				currentPath = part
+			} else {
+				currentPath = currentPath + "/" + part
+			}
+
+			// 判断是否为该条目自身的终点
+			isLastPart := i == len(parts)-1
+
+			// 如果该节点已存在，直接跳过进入下一层
+			if _, exists := nodesMap[currentPath]; exists {
+				continue
+			}
+
+			// 3. 创建新节点
+			newNode := &api.ResourceUnarchiveResponse{
+				File:    currentPath,
+				Title:   part,
+				Dir:     !isLastPart || f.FileInfo().IsDir(),
+				Entries: []*api.ResourceUnarchiveResponse{},
+			}
+
+			// 只有是文件且是路径终点时，才记录大小
+			if isLastPart && !f.FileInfo().IsDir() {
+				newNode.Size = f.UncompressedSize64
+			}
+
+			// 4. 挂载节点
+			if parentPath == "" {
+				// 顶层目录
+				rootEntries = append(rootEntries, newNode)
+			} else {
+				// 挂载到父节点
+				if parentNode, ok := nodesMap[parentPath]; ok {
+					parentNode.Entries = append(parentNode.Entries, newNode)
+					parentNode.Dir = true // 确保父节点被标记为目录
+				}
+			}
+
+			// 5. 缓存目录节点（文件节点理论上不需要缓存，但为了逻辑统一也可以放进去）
+			nodesMap[currentPath] = newNode
+		}
+	}
+	return rootEntries
 }
 
 var DefaultResourceApi = sync.OnceValue(func() *ResourceApi {

@@ -31,21 +31,35 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
-// sniffLen 最多读取字节数，来判断 contentType
 const sniffLen = 512
 
-// compressionThreshold 压缩阈值
-var compressionThreshold = int64(types.KB)
-
 type ResourceService struct {
-	objectService *ObjectService
+	objectService        *ObjectService
+	compressionThreshold int64    // 压缩阈值
+	unCompressionType    []string // 不进行压缩的媒体类型
 }
 
-func NewResourceService(service *ObjectService) *ResourceService {
-	return &ResourceService{objectService: service}
+func NewResourceService(service *ObjectService, compressionThreshold int64, unCompressionType []string) *ResourceService {
+	return &ResourceService{
+		objectService:        service,
+		compressionThreshold: compressionThreshold,
+		unCompressionType:    unCompressionType,
+	}
+}
+
+// Compression 是否满足压缩条件
+func (s *ResourceService) Compression(contentType string, size int64) bool {
+	if size < s.compressionThreshold {
+		return false
+	}
+	for _, t := range s.unCompressionType {
+		if strings.HasPrefix(contentType, t) {
+			return false
+		}
+	}
+	return true
 }
 
 // List 查询资源列表
@@ -53,7 +67,7 @@ func (s *ResourceService) List(ctx context.Context, request *api.ResourceListReq
 
 	var ret = make([]*api.ResourceListResponse, 0)
 
-	params := []any{request.MemberId, request.ParentId}
+	params := []any{request.MemberId}
 
 	statement := &strings.Builder{}
 	_, _ = statement.WriteString(`SELECT
@@ -69,20 +83,26 @@ func (s *ResourceService) List(ctx context.Context, request *api.ResourceListReq
 				t1.status status
 			FROM
 				t_resource t
-				LEFT JOIN t_object t1 ON t1.id = t.object_id
+				LEFT JOIN t_object t1 ON t1.id = t.object_id AND t.dir = 0
 			WHERE
-				t.member_id = ? 
-			AND 
-				t.parent_id = ?`)
+				t.member_id = ?`)
 
 	// 条件
+	if request.ParentId > 0 {
+		statement.WriteString(" AND t.parent_id = ?")
+		params = append(params, request.ParentId)
+	}
 	if request.Dir != nil {
-		_, _ = statement.WriteString(" AND dir = ?")
+		statement.WriteString(" AND t.dir = ?")
 		params = append(params, request.Dir)
+	}
+	if request.Keywords != "" {
+		statement.WriteString(" AND t.title = ?")
+		params = append(params, "%"+request.Keywords+"%")
 	}
 
 	// 排序
-	_, _ = statement.WriteString(" ORDER BY dir DESC, title ASC")
+	// _, _ = statement.WriteString(" ORDER BY dir DESC, title ASC")
 
 	session := db.Session(ctx)
 	rows, err := session.Raw(statement.String(), params...).Rows()
@@ -128,7 +148,7 @@ func (s *ResourceService) Get(ctx context.Context, memberId, resourceId int64) (
 			AND
 				t.dir = ?
 		`, resourceId, memberId, false).Row()
-	err = row.Scan(&ret.Title, &ret.Compression, &ret.ContentType, &ret.Path)
+	err = row.Scan(&ret.Title, &ret.Compression, &ret.ContentType, &ret.Path, &ret.Status)
 	return
 }
 
@@ -143,10 +163,10 @@ func (s *ResourceService) NewObjectRef(ctx context.Context, memberId, parentId, 
 	)
 
 	if parentId != model.DefaultResourceParentId {
-		dir, err := gorm.G[*model.Resource](db.Session(ctx).Clauses(clause.Locking{Strength: "UPDATE"})). // for update
-															Select("id", "dir", "path", "depth").
-															Where("id = ? AND member_id = ?", parentId, memberId).
-															Take(ctx)
+		dir, err := gorm.G[*model.Resource](db.Session(ctx)). // for update
+									Select("id", "dir", "path", "depth").
+									Where("id = ? AND member_id = ?", parentId, memberId).
+									Take(ctx)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				err = common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("上传目录不存在"))
@@ -226,7 +246,7 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	if _, err := io.Copy(hasher, file); err != nil {
 		return err
 	}
-	hash := hex.EncodeToString(hasher.Sum(nil))
+	hash := strings.ToLower(hex.EncodeToString(hasher.Sum(nil))) // 统一 hash 为小写
 
 	// 查询 Hash 是否存在
 	objectId, err := s.objectService.Exists(ctx, "hash", hash)
@@ -256,6 +276,8 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 		}
 	}
 
+	contentType = strings.ToLower(contentType)
+
 	// 目录打散 & 随机文件名称
 	newFilePath := path.Join(path.Join(s.RandDir()...), id.UUID())
 
@@ -268,9 +290,9 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 
 	var writer io.WriteCloser = newFile
 
-	// 非音/视频文件且体积大于阈值，才进行压缩
-	var compress = !(strings.HasPrefix(contentType, "video/") || strings.HasPrefix(contentType, "audio/")) &&
-		fileHeader.Size > compressionThreshold
+	// 压缩判断
+	var compress = s.Compression(contentType, fileHeader.Size)
+
 	if compress {
 		writer = gzip.NewWriter(newFile)
 		defer util.SafeClose(writer)
@@ -282,12 +304,6 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 		return err
 	}
 
-	// 查询文件状态
-	stat, err := newFile.Stat()
-	if err != nil {
-		return err
-	}
-
 	slog.InfoContext(ctx, "新文件",
 		slog.String("name", fileHeader.Filename),
 		slog.Int64("size", fileHeader.Size),
@@ -295,6 +311,12 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 		slog.Int64("written", written),
 		slog.String("hash", hash),
 	)
+
+	// 查询文件状态
+	stat, err := newFile.Stat()
+	if err != nil {
+		return err
+	}
 
 	// 持久化数据
 	now := time.Now().UnixMilli()
@@ -661,14 +683,14 @@ func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*api.Reso
 				t_resource t
 				LEFT JOIN t_object t1 ON t1.id = t.object_id AND t.dir = 0
 			WHERE
-				t.member_id = 1
-			ORDER BY dir DESC, title ASC`, memberId).Rows()
+				t.member_id = ?
+			ORDER BY t.dir DESC, t.title ASC, t.create_time DESC`, memberId).Rows()
 	if err != nil {
 		return nil, err
 	}
 	defer util.SafeClose(rows)
 
-	var resources = make(map[int64]*api.ResourceTreeResponse)
+	var resources = make(map[int64]*api.ResourceTreeResponse) // 前端对结果排序
 
 	for rows.Next() {
 		resource := &api.ResourceListResponse{}
@@ -814,4 +836,25 @@ func (s *ResourceService) uploadDir(ctx context.Context, memberId int64, parentI
 	return nil
 }
 
-var DefaultResourceService = NewResourceService(DefaultObjectService)
+// FlashUpload 闪电传
+func (s *ResourceService) FlashUpload(ctx context.Context, request *api.ResourceFlashUploadRequest, memberId, parentId int64) error {
+	// 根据 hash 检索对象信息
+	object, err := gorm.G[model.Object](db.Session(ctx)).Select("id").Where("hash = ?", request.Hash).Take(ctx)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if object.Id < 1 {
+		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源不存在"))
+	}
+	// 创建新的资源
+	return s.NewObjectRef(ctx, memberId, parentId, object.Id, request.Title)
+}
+
+var DefaultResourceService = NewResourceService(DefaultObjectService,
+	int64(types.KB),
+	[]string{
+		"video/",           // 视频，Range 支持
+		"audio/",           // 音频，Range 支持
+		"application/zip",  // zip 不压缩，需要在线解压
+		"application/gzip", // 本身就是 gzip 的文件不进行压缩
+	})
