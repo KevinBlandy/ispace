@@ -470,9 +470,9 @@ func (r ResourceApi) Unarchive(g *gin.Context) (any, error) {
 
 	// 查询某个文件
 	for _, f := range zipReader.File {
-		if f.Name == file {
+		if f.Name == file && !f.FileInfo().IsDir() {
 			err := func(f *zip.File) error {
-				contentType := mime.TypeByExtension(filepath.Ext(f.Name))
+				contentType := mime.TypeByExtension(filepath.Ext(f.FileInfo().Name()))
 				if contentType == "" {
 					contentType = "application/octet-stream"
 				}
@@ -481,7 +481,7 @@ func (r ResourceApi) Unarchive(g *gin.Context) (any, error) {
 				g.Header("Content-Length", strconv.FormatUint(f.UncompressedSize64, 10))
 				download := util.BoolQuery(g.GetQuery("download"))
 				if download != nil && *download {
-					g.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(f.Name)}))
+					g.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": f.FileInfo().Name()}))
 				}
 				fileReader, err := f.Open()
 				if err != nil {
