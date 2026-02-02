@@ -28,6 +28,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -100,9 +101,6 @@ func (s *ResourceService) List(ctx context.Context, request *api.ResourceListReq
 		statement.WriteString(" AND t.title = ?")
 		params = append(params, "%"+request.Keywords+"%")
 	}
-
-	// 排序
-	// _, _ = statement.WriteString(" ORDER BY dir DESC, title ASC")
 
 	session := db.Session(ctx)
 	rows, err := session.Raw(statement.String(), params...).Rows()
@@ -627,8 +625,9 @@ func (s *ResourceService) Move(ctx context.Context, request *api.ResourceMoveReq
 			Where("member_id = ? AND path LIKE ?", request.MemberId, resource.Path+"%").
 			UpdateColumns(map[string]any{
 				"update_time": now,
-				"path":        gorm.Expr("? || replace(path, ?, '')", parentPath, commonPrefix),
-				"depth":       gorm.Expr("depth - ? + 1", diffDepth),
+				//"path":        gorm.Expr("? || replace(path, ?, '')", parentPath, commonPrefix),
+				"path":  gorm.Expr("CONCAT(?, replace(path, ?, ''))", parentPath, commonPrefix),
+				"depth": gorm.Expr("depth - ? + 1", diffDepth),
 			})
 
 		if result.Error != nil {
@@ -848,6 +847,138 @@ func (s *ResourceService) FlashUpload(ctx context.Context, request *api.Resource
 	}
 	// 创建新的资源
 	return s.NewObjectRef(ctx, memberId, parentId, object.Id, request.Title)
+}
+
+// Download 下载文件
+func (s *ResourceService) Download(ctx context.Context, memberId int64, resourceIds types.Int64Slice) ([]*store.DownloadTree, error) {
+
+	session := db.Session(ctx)
+
+	// 检索资源列表
+	rows, err := session.Raw(`SELECT
+				t.id,
+				t.parent_id,
+				t.title,
+				t.dir,
+				ifnull(t1.path, ''),
+				ifnull(t1.compression, '')
+			FROM
+				t_resource t
+				LEFT JOIN t_object t1 ON t1.id = t.object_id AND t.dir = 0
+			WHERE
+				t.member_id = ?
+			AND
+				t.id IN ?`, memberId, resourceIds).Rows()
+	if err != nil {
+		return nil, err
+	}
+
+	defer util.SafeClose(rows)
+
+	resources := make([]*store.DownloadTree, 0)
+
+	for rows.Next() {
+		resource := new(store.DownloadTree)
+		if err := rows.Scan(&resource.Id, &resource.ParentId, &resource.Title, &resource.Dir, &resource.Path, &resource.Compression); err != nil {
+			return nil, err
+		}
+		resources = append(resources, resource)
+	}
+
+	// 构建完整的订单树
+	var subTree = func(r *store.DownloadTree) error {
+		// 检索树下的所有记录
+		rows, err := session.Raw(`
+			SELECT
+				t.id,
+				t.parent_id,
+				t.title,
+				t.dir,
+				ifnull(t1.path, ''),
+				ifnull(t1.compression, '')
+			FROM
+				t_resource t
+				LEFT JOIN t_object t1 ON t1.id = t.object_id AND t.dir = 0
+			WHERE
+				t.member_id = ?
+			AND
+				t.path LIKE CONCAT(
+					(SELECT path FROM t_resource WHERE id = ?),
+					'%'
+				)
+			AND
+				t.id <> ?
+		`, memberId, r.Id, r.Id).Rows()
+
+		if err != nil {
+			return err
+		}
+
+		defer util.SafeClose(rows)
+
+		// Map 结构存储
+		var resourceMap = make(map[int64]*store.DownloadTree)
+		for rows.Next() {
+			resource := new(store.DownloadTree)
+			if err := rows.Scan(&resource.Id, &resource.ParentId, &resource.Title, &resource.Dir, &resource.Path, &resource.Compression); err != nil {
+				return err
+			}
+			resourceMap[resource.Id] = resource
+		}
+
+		if len(resourceMap) == 0 {
+			return nil
+		}
+
+		// 顶级记录
+		for _, resource := range resourceMap {
+			if resource.ParentId == r.Id {
+				r.Entries = append(r.Entries, resource)
+				delete(resourceMap, resource.Id)
+			}
+		}
+
+		var subEntry func(*store.DownloadTree, map[int64]*store.DownloadTree)
+
+		subEntry = func(r *store.DownloadTree, m map[int64]*store.DownloadTree) {
+			r.Entries = make([]*store.DownloadTree, 0)
+			for _, resource := range m {
+				if resource.ParentId == r.Id {
+					r.Entries = append(r.Entries, resource)
+					delete(m, resource.Id)
+				}
+			}
+			if len(r.Entries) > 0 {
+				for _, resource := range r.Entries {
+					subEntry(resource, m)
+				}
+			}
+		}
+
+		// 递归构建所有的子记录
+		for _, entry := range r.Entries {
+			subEntry(entry, resourceMap)
+		}
+
+		return nil
+	}
+
+	waitGroup := new(sync.WaitGroup)
+
+	for _, resource := range resources {
+		// 目录的话，构建完整的文件树
+		if resource.Dir {
+			waitGroup.Go(func() {
+				if err := subTree(resource); err != nil {
+					slog.ErrorContext(ctx, "检索资源树异常", slog.String("err", err.Error()))
+				}
+			})
+		}
+	}
+
+	waitGroup.Wait()
+
+	return resources, nil
 }
 
 var DefaultResourceService = NewResourceService(DefaultObjectService,

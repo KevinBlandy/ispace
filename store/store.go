@@ -14,9 +14,19 @@ type Store struct {
 	*os.Root
 }
 
-// Delete 彻底直接删除整个存储桶
-func (s *Store) Delete() error {
+// Destroy 彻底直接删除整个存储桶
+func (s *Store) Destroy() error {
 	return os.RemoveAll(s.Name())
+}
+
+// Remove 删除资源
+func (s *Store) Remove(name string) error {
+	return s.Root.Remove(filepath.FromSlash(name))
+}
+
+// Stat 文件信息
+func (s *Store) Stat(name string) (os.FileInfo, error) {
+	return s.Root.Stat(filepath.FromSlash(name))
 }
 
 // Open 读取文件

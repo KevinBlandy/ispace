@@ -68,10 +68,10 @@ func New() http.Handler {
 		memberApi.POST("/resources/upload/dir", H(member.DefaultResourceApi().UploadDir))     // 上传文件夹
 		memberApi.POST("/resources/mkdir", H(member.DefaultResourceApi().MkDir))              // 创建目录
 		memberApi.POST("/resources/:id/rename", H(member.DefaultResourceApi().Rename))        // 重命名资源
-		memberApi.DELETE("/resources/delete", H(member.DefaultResourceApi().Delete))          // 删除资源
+		memberApi.DELETE("/resources/", H(member.DefaultResourceApi().Delete))                // 删除资源
 		memberApi.POST("/resources/move", H(member.DefaultResourceApi().Move))                // 移动资源
 		memberApi.GET("/resources/download", H(member.DefaultResourceApi().Download))         // 下载资源
-		memberApi.GET("/resources/unarchive/:id", H(member.DefaultResourceApi().Unarchive))   // 解压资源
+		memberApi.GET("/resources/:id/unarchive", H(member.DefaultResourceApi().Unarchive))   // 解压资源
 		memberApi.GET("/resources/search", NoContent)                                         // 搜索资源
 		memberApi.POST("/resources/share", NoContent)                                         // 分享资源
 		memberApi.GET("/resources/group", NoContent)                                          // 资源分组

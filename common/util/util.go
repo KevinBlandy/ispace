@@ -2,6 +2,9 @@ package util
 
 import (
 	"io"
+	"ispace/common/types"
+	"maps"
+	"slices"
 	"strconv"
 )
 
@@ -44,4 +47,17 @@ func BoolQuery(value string, ok bool) *bool {
 		boolVal, _ = strconv.ParseBool(value)
 	}
 	return &boolVal
+}
+
+// Int64SliceQuery int64 查询参数，去重
+func Int64SliceQuery(value []string) (types.Int64Slice, error) {
+	m := make(map[int64]struct{}, len(value))
+	for _, v := range value {
+		int64Val, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return nil, err // 解码失败
+		}
+		m[int64Val] = struct{}{}
+	}
+	return slices.Collect(maps.Keys(m)), nil
 }

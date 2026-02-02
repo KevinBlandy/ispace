@@ -2,54 +2,80 @@ package store
 
 import (
 	"archive/zip"
+	"compress/gzip"
+	"errors"
 	"io"
-	"io/fs"
 	"ispace/common/util"
 	"ispace/repo/model"
 	"mime"
 	"net/http"
+	"path"
 	"path/filepath"
+	"strconv"
 )
 
-func (s *Store) Download(w http.ResponseWriter, resources ...model.Resource) (err error) {
-	return err
+// DownloadTree 下载树
+type DownloadTree struct {
+	Id          int64                   `json:"-"`           // 记录 ID
+	ParentId    int64                   `json:"-"`           // 父级 ID
+	Path        string                  `json:"path"`        // 物理路径
+	Title       string                  `json:"title"`       // 标题
+	Dir         bool                    `json:"dir"`         // 是否是目录
+	Compression model.ObjectCompression `json:"compression"` // 压缩
+	Entries     []*DownloadTree         `json:"entries"`     // 子项目列表
 }
 
 // Downloads 下载单个/多个文件
-func (s *Store) Downloads(w http.ResponseWriter, paths ...string) (err error) {
+func (s *Store) Downloads(w http.ResponseWriter, files ...*DownloadTree) (err error) {
 
-	if len(paths) == 0 {
+	if len(files) == 0 {
+		//w.WriteHeader(http.StatusNoContent)
+		http.NotFound(w, nil)
 		return nil
 	}
 
-	if len(paths) == 1 {
-		filePath := filepath.FromSlash(paths[0])
-		stat, err := s.Stat(filePath)
-		if err != nil {
-			return err
-		}
-		if !stat.IsDir() {
-			// 只有一个文件，且文件非目录
-			file, err := s.Root.Open(filePath)
+	// 只有一个下载目标，且是文件
+	if len(files) == 1 {
+
+		singleFile := files[0]
+
+		if !singleFile.Dir {
+			file, err := s.Open(singleFile.Path)
 			if err != nil {
 				return err
 			}
+
+			stat, err := file.Stat()
+			if err != nil {
+				return err
+			}
+
 			defer func() {
 				_ = file.Close()
 			}()
-			contentType := mime.TypeByExtension(filepath.Ext(stat.Name()))
+
+			contentType := mime.TypeByExtension(filepath.Ext(singleFile.Title))
 			if contentType == "" {
 				contentType = "application/octet-stream"
 			}
+
+			if singleFile.Compression != model.ObjectCompressionNone {
+				w.Header().Set("Content-Encoding", string(singleFile.Compression))
+			}
+
+			w.Header().Set("Content-Length", strconv.FormatInt(stat.Size(), 10))
 			w.Header().Set("Content-Type", contentType)
-			w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": stat.Name()}))
+			w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": singleFile.Title}))
 			_, err = io.Copy(w, file)
 			return err
 		}
 	}
 
+	// 文件存在多个的时候，下载为 zip 格式
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": "download.zip"}))
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment",
+		map[string]string{"filename": "ispace-download.zip"}),
+	)
 
 	zipWriter := zip.NewWriter(w)
 
@@ -57,47 +83,64 @@ func (s *Store) Downloads(w http.ResponseWriter, paths ...string) (err error) {
 		_ = zipWriter.Close()
 	}()
 
-	for _, path := range paths {
+	var handler func(*zip.Writer, string, *DownloadTree) error
 
-		stat, err := s.Stat(path)
+	handler = func(zipWriter *zip.Writer, treePath string, tree *DownloadTree) error {
+
+		completePath := path.Join(treePath, tree.Title)
+
+		if tree.Dir {
+			// 创建目录
+			if _, err := zipWriter.CreateHeader(&zip.FileHeader{
+				Name:   completePath + "/", // "/" 结尾表示目录
+				Method: zip.Store,          // 目录不压缩
+			}); err != nil {
+				return err
+			}
+			// 递归
+			for _, entry := range tree.Entries {
+				if err := handler(zipWriter, completePath, entry); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+
+		// 写入文件
+		file, err := s.Open(tree.Path)
 		if err != nil {
 			return err
 		}
 
-		if stat.IsDir() {
-			// 目录
-			subFs, err := fs.Sub(s.FS(), path)
+		var fileReader io.ReadCloser = file
+
+		defer util.SafeClose(fileReader)
+
+		// 压缩
+		switch tree.Compression {
+		case model.ObjectCompressionNone:
+		case model.ObjectCompressionGzip:
+			fileReader, err = gzip.NewReader(file)
 			if err != nil {
 				return err
 			}
-			//if err := zipWriter.AddFS(subFs); err != nil {
-			//	return err
-			//}
-			if err := util.AddDirFS(zipWriter, subFs, stat.Name()); err != nil {
-				return err
-			}
-		} else {
-			// 文件
-			err := func() error {
-				file, err := s.Open(path)
-				if err != nil {
-					return err
-				}
-				defer func() {
-					_ = file.Close()
-				}()
-				fileWriter, err := zipWriter.Create(stat.Name()) // TODO 需要考虑到同一批文件中存在同名的文件
-				if err != nil {
-					return err
-				}
-				_, err = io.Copy(fileWriter, file)
-				return err
-			}()
-			if err != nil {
-				return err
-			}
+		default:
+			return errors.New("未实现的压缩格式")
 		}
+
+		fileWriter, err := zipWriter.Create(completePath)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(fileWriter, fileReader)
+		return err
 	}
 
+	// 递归写入所有的资源
+	for _, file := range files {
+		if err := handler(zipWriter, "", file); err != nil {
+			return err
+		}
+	}
 	return nil
 }

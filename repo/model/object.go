@@ -3,6 +3,19 @@ package model
 // ObjectCompression 对象的压缩方式，使用 Content-Encoding 值
 type ObjectCompression string
 
+// ContentEncoding 对应的编码类型
+// https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Encoding
+func (o ObjectCompression) ContentEncoding() string {
+	switch o {
+	case ObjectCompressionGzip:
+		return "gzip"
+	case ObjectCompressionBrotli:
+		return "br"
+	default:
+		return ""
+	}
+}
+
 var (
 	// ObjectCompressionNone 未压缩
 	ObjectCompressionNone ObjectCompression = "none"
@@ -10,6 +23,8 @@ var (
 	ObjectCompressionGzip ObjectCompression = "gzip"
 	// ObjectCompressionBrotli Brotli 压缩
 	ObjectCompressionBrotli ObjectCompression = "br"
+	// ObjectCompressionUnknow 未知
+	ObjectCompressionUnknow ObjectCompression = ""
 )
 
 type ObjectStatus string

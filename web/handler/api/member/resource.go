@@ -367,20 +367,32 @@ func (r ResourceApi) FlashUpload(g *gin.Context) (any, error) {
 
 // Download 下载资源
 func (r ResourceApi) Download(g *gin.Context) (any, error) {
-	ids := g.QueryArray("resourceId") // 可以有多个
+	ids := g.QueryArray("id") // 可以有多个
 	if len(ids) == 0 {
 		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("下载资源不能为空"))
 	}
-	var resourceId = make([]int64, 0)
-	for _, v := range ids {
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
-		}
-		resourceId = append(resourceId, id)
+
+	// 查询要下载的资源列表
+	resourceIds, err := util.Int64SliceQuery(ids)
+	if err != nil {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
 	}
 
-	// TODO 下载
+	// 检索树形结构
+	tree, err := db.Transaction(g.Request.Context(), func(ctx context.Context) ([]*store.DownloadTree, error) {
+		return service.DefaultResourceService.Download(ctx, g.GetInt64(constant.CtxKeySubject), resourceIds)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 执行下载
+	if err := store.DefaultStore().Downloads(g.Writer, tree...); err != nil {
+		return nil, err
+	}
+
+	g.Abort()
 
 	return nil, nil
 }
