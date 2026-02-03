@@ -62,7 +62,7 @@ func (a *SessionService) Issue(ctx context.Context, subjectId int64) (string, er
 		ID:       jwtId,
 		Subject:  subject,
 		IssuedAt: jwt.NewNumericDate(now),
-	}).SignedString([]byte(a.sysConfigService.Get(model.SysConfigKeySessionSecret).Value))
+	}).SignedString([]byte(a.sysConfigService.Get(ctx, model.SysConfigKeySessionSecret).Value))
 
 	//result, err := auth.JWTEncode(
 	//	jwtId,
@@ -75,7 +75,7 @@ func (a *SessionService) Issue(ctx context.Context, subjectId int64) (string, er
 	}
 
 	// 过期时间
-	expire := a.sysConfigService.Get(model.SysConfigKeySessionExpire).DurationValue()
+	expire := a.sysConfigService.Get(ctx, model.SysConfigKeySessionExpire).DurationValue()
 
 	// 缓存到 Redis
 	_, err = rdb.ExecuteClient(a.redisConn, func(conn *redis.Conn) (any, error) {
@@ -91,7 +91,9 @@ func (a *SessionService) Parse(ctx context.Context, signed string) (*Session, er
 	// 解码
 	var claims jwt.RegisteredClaims
 
-	token, err := jwt.NewParser().ParseWithClaims(signed, &claims, a.keyFunc)
+	token, err := jwt.NewParser().ParseWithClaims(signed, &claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(a.sysConfigService.Get(ctx, model.SysConfigKeySessionSecret).Value), nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +141,7 @@ func (a *SessionService) Parse(ctx context.Context, signed string) (*Session, er
 // Renewal 续约 Session
 func (a *SessionService) Renewal(ctx context.Context, session *Session) (bool, error) {
 
-	expire := a.sysConfigService.Get(model.SysConfigKeySessionExpire).DurationValue()
+	expire := a.sysConfigService.Get(ctx, model.SysConfigKeySessionExpire).DurationValue()
 
 	return rdb.ExecuteClient(a.redisConn, func(conn *redis.Conn) (bool, error) {
 		return conn.SetXX(ctx,
@@ -154,10 +156,10 @@ func (a *SessionService) Renewal(ctx context.Context, session *Session) (bool, e
 	})
 }
 
-// keyFunc 返回 jwt 加密 key
-func (a *SessionService) keyFunc(_ *jwt.Token) (any, error) {
-	return []byte(a.sysConfigService.Get(model.SysConfigKeySessionSecret).Value), nil
-}
+//// keyFunc 返回 jwt 加密 key
+//func (a *SessionService) keyFunc(_ *jwt.Token) (any, error) {
+//	return []byte(a.sysConfigService.Get(context.Background(), model.SysConfigKeySessionSecret).Value), nil
+//}
 
 // DefaultMemberSessionService 用户会话
 var DefaultMemberSessionService = sync.OnceValue(func() *SessionService {

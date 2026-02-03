@@ -33,8 +33,9 @@ func New() http.Handler {
 	// 405
 	router.NoMethod(handler.MethodNotAllowed)
 
-	// Filter
+	// Global Filter
 	router.Use(
+		gin.Recovery(),
 		filter.NewRequestIdFilter(), // 请求 ID
 		filter.RequestTime,          // 请求时间
 		filter.TimeZone( // 客户端时区

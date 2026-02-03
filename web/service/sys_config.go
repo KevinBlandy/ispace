@@ -6,6 +6,7 @@ import (
 	"ispace/common/concurrent"
 	"ispace/db"
 	"ispace/repo/model"
+	"log/slog"
 
 	"gorm.io/gorm"
 )
@@ -15,19 +16,16 @@ type SysConfigService struct {
 }
 
 // Get 从缓存中读取全局配置
-func (s *SysConfigService) Get(key model.SysConfigKey) *model.SysConfig {
+func (s *SysConfigService) Get(ctx context.Context, key model.SysConfigKey) *model.SysConfig {
 	config, loaded := s.cache.Load(key)
 	if !loaded {
 		var err error
-		config, err = db.Transaction(context.Background(), func(ctx context.Context) (*model.SysConfig, error) {
+		config, err = db.Transaction(ctx, func(ctx context.Context) (*model.SysConfig, error) {
 			return gorm.G[*model.SysConfig](db.Session(ctx)).Where("key = ?", key).Take(ctx)
 		}, db.TxReadOnly)
 		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-
-			} else {
-
-			}
+			slog.ErrorContext(ctx, "查询全局配置异常", slog.String("err", err.Error()))
+			return nil
 		}
 		s.cache.Store(key, config)
 	}
