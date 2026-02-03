@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"ispace/common"
 	"ispace/common/constant"
 	"ispace/common/id"
+	"ispace/common/page"
 	"ispace/common/response"
 	"ispace/common/types"
 	"ispace/common/util"
@@ -75,6 +77,7 @@ func (s *ResourceService) List(ctx context.Context, request *api.ResourceListReq
 				t.id,
 				t.parent_id,
 				t.title,
+				t.content_type,
 				t.dir,
 				t.create_time,
 				t.update_time,
@@ -93,14 +96,14 @@ func (s *ResourceService) List(ctx context.Context, request *api.ResourceListReq
 		statement.WriteString(" AND t.parent_id = ?")
 		params = append(params, request.ParentId)
 	}
-	if request.Dir != nil {
-		statement.WriteString(" AND t.dir = ?")
-		params = append(params, request.Dir)
-	}
-	if request.Keywords != "" {
-		statement.WriteString(" AND t.title = ?")
-		params = append(params, "%"+request.Keywords+"%")
-	}
+	//if request.Dir != nil {
+	//	statement.WriteString(" AND t.dir = ?")
+	//	params = append(params, request.Dir)
+	//}
+	//if request.Keywords != "" {
+	//	statement.WriteString(" AND t.title = ?")
+	//	params = append(params, "%"+request.Keywords+"%")
+	//}
 
 	session := db.Session(ctx)
 	rows, err := session.Raw(statement.String(), params...).Rows()
@@ -132,8 +135,8 @@ func (s *ResourceService) Get(ctx context.Context, memberId, resourceId int64) (
 	row := db.Session(ctx).Raw(`
 			SELECT
 				t.title,
+				t.content_type,
 				t1.compression,
-				t1.content_type,
 				t1.path,
 				t1.status
 			FROM
@@ -187,19 +190,26 @@ func (s *ResourceService) NewObjectRef(ctx context.Context, memberId, parentId, 
 		return err
 	}
 
-	now := time.Now().UnixMilli()
+	// 根据文件名称计算资源的 ContentType
+	contentType := mime.TypeByExtension(filepath.Ext(title))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	now := util.ContextValueDefault(ctx, constant.CtxKeyRequestTime, time.Now()).UnixMilli()
 
 	err = gorm.G[model.Resource](db.Session(ctx)).Create(ctx, &model.Resource{
-		Id:         resourceId,
-		MemberId:   memberId,
-		ObjectId:   objectId,
-		ParentId:   parentId,
-		Title:      title,
-		Dir:        false, // 文件
-		Path:       newPath,
-		Depth:      newDepth,
-		CreateTime: now,
-		UpdateTime: now,
+		Id:          resourceId,
+		MemberId:    memberId,
+		ObjectId:    objectId,
+		ParentId:    parentId,
+		Title:       title,
+		ContentType: contentType,
+		Dir:         false, // 文件
+		Path:        newPath,
+		Depth:       newDepth,
+		CreateTime:  now,
+		UpdateTime:  now,
 	})
 
 	if err != nil {
@@ -224,12 +234,51 @@ func (s *ResourceService) NewObjectRef(ctx context.Context, memberId, parentId, 
 	return nil
 }
 
-// Upload 上传文件到磁盘
-func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId int64, fileHeader *multipart.FileHeader) error {
-	if fileHeader.Size == 0 {
+// Resource 资源描述
+type Resource interface {
+	io.Reader
+	io.ReaderAt
+	io.Seeker
+	io.Closer
+}
+
+// UploadResource 资源接口
+type UploadResource interface {
+	Filename() string        // 文件名称
+	Size() int64             // 文件大小
+	Open() (Resource, error) // 打开 Reader
+}
+
+type LocalFileResource struct {
+	*os.File
+	size     int64
+	filename string
+}
+
+func NewLocalFileResource(
+	size int64,
+	filename string,
+	file *os.File) *LocalFileResource {
+	return &LocalFileResource{File: file, size: size, filename: filename}
+}
+
+func (r *LocalFileResource) Open() (Resource, error) {
+	return r.File, nil
+}
+
+func (r *LocalFileResource) Size() int64 {
+	return r.size
+}
+func (r *LocalFileResource) Filename() string {
+	return r.filename
+}
+
+// Upload 资源上传
+func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId int64, fileHeader UploadResource) error {
+	if fileHeader.Size() == 0 {
 		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("不能上传空文件"))
 	}
-	if strings.TrimSpace(fileHeader.Filename) == "" {
+	if strings.TrimSpace(fileHeader.Filename()) == "" {
 		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("文件名称不能为空"))
 	}
 
@@ -253,7 +302,7 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	}
 	if objectId > 0 {
 		// 已存在了文件，复制引用即可
-		return s.NewObjectRef(ctx, memberId, parentId, objectId, fileHeader.Filename)
+		return s.NewObjectRef(ctx, memberId, parentId, objectId, fileHeader.Filename())
 	}
 
 	// 重置指针
@@ -262,7 +311,7 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	}
 
 	// 查询媒体类型
-	contentType := mime.TypeByExtension(filepath.Ext(fileHeader.Filename))
+	contentType := mime.TypeByExtension(filepath.Ext(fileHeader.Filename()))
 	if contentType == "" {
 		// 没扩展名，则尝试用魔术值
 		var buf [sniffLen]byte
@@ -277,7 +326,7 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	contentType = strings.ToLower(contentType)
 
 	// 目录打散 & 随机文件名称
-	newFilePath := path.Join(path.Join(s.RandDir()...), id.UUID())
+	newFilePath := path.Join(path.Join(s.RandDir(ctx)...), id.UUID())
 
 	// 创建文件
 	newFile, err := store.DefaultStore().OpenFile(newFilePath, os.O_CREATE|os.O_EXCL|os.O_RDWR, os.ModePerm)
@@ -289,7 +338,7 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	var writer io.WriteCloser = newFile
 
 	// 压缩判断
-	var compress = s.Compression(contentType, fileHeader.Size)
+	var compress = s.Compression(contentType, fileHeader.Size())
 
 	if compress {
 		writer = gzip.NewWriter(newFile)
@@ -303,8 +352,8 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	}
 
 	slog.InfoContext(ctx, "新文件",
-		slog.String("name", fileHeader.Filename),
-		slog.Int64("size", fileHeader.Size),
+		slog.String("name", fileHeader.Filename()),
+		slog.Int64("size", fileHeader.Size()),
 		slog.String("path", newFilePath),
 		slog.Int64("written", written),
 		slog.String("hash", hash),
@@ -317,14 +366,14 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	}
 
 	// 持久化数据
-	now := time.Now().UnixMilli()
+	now := util.ContextValueDefault(ctx, constant.CtxKeyRequestTime, time.Now()).UnixMilli()
 
 	object := &model.Object{
 		Id:          id.Next().Int64(),
 		Path:        newFilePath,
 		Compression: util.If(compress, model.ObjectCompressionGzip, model.ObjectCompressionNone),
 		Hash:        hash,
-		Size:        fileHeader.Size,
+		Size:        fileHeader.Size(),
 		FileSize:    stat.Size(),
 		RefCount:    0,
 		ContentType: contentType,
@@ -336,15 +385,39 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 		return err
 	}
 
-	return s.NewObjectRef(ctx, memberId, parentId, object.Id, fileHeader.Filename)
+	return s.NewObjectRef(ctx, memberId, parentId, object.Id, fileHeader.Filename())
+}
+
+// MultipartPartResource Multipart 上传
+type MultipartPartResource struct {
+	*multipart.FileHeader
+}
+
+func (m *MultipartPartResource) Filename() string {
+	return m.FileHeader.Filename
+}
+func (m *MultipartPartResource) Size() int64 {
+	return m.FileHeader.Size
+}
+func (m *MultipartPartResource) Open() (Resource, error) {
+	return m.FileHeader.Open()
+}
+
+func NewMultipartPartResource(header *multipart.FileHeader) *MultipartPartResource {
+	return &MultipartPartResource{FileHeader: header}
+}
+
+// UploadMultipart 上传文件到磁盘
+func (s *ResourceService) UploadMultipart(ctx context.Context, memberId int64, parentId int64, fileHeader *multipart.FileHeader) error {
+	return s.Upload(ctx, memberId, parentId, NewMultipartPartResource(fileHeader))
 }
 
 // RandDir 目录打散
-func (s *ResourceService) RandDir() []string {
+func (s *ResourceService) RandDir(ctx context.Context) []string {
 
 	var ret []string
 
-	now := time.Now()
+	now := util.ContextValueDefault(ctx, constant.CtxKeyRequestTime, time.Now())
 
 	ret = append(ret, fmt.Sprintf("%d", now.Year()))
 	ret = append(ret, fmt.Sprintf("%02d", now.Month()))
@@ -395,7 +468,8 @@ func (s *ResourceService) mkdir(ctx context.Context, request *api.ResourceMkdirR
 	}
 
 	// 保存
-	now := time.Now().UnixMilli()
+	now := util.ContextValueDefault(ctx, constant.CtxKeyRequestTime, time.Now()).UnixMilli()
+
 	r := &model.Resource{
 		Id:         resourceId,
 		MemberId:   request.MemberId,
@@ -415,40 +489,39 @@ func (s *ResourceService) mkdir(ctx context.Context, request *api.ResourceMkdirR
 func (s *ResourceService) Rename(ctx context.Context, request *api.ResourceRenameRequest) error {
 
 	// 查询资源所在目录
-	var parentId uint64
-	err := gorm.G[model.Resource](db.Session(ctx)).
-		Select("parent_id").
-		Where("id = ? AND member_id = ?", request.Id, request.MemberId).Scan(ctx, &parentId)
+	//var parentId uint64
+	resource, err := gorm.G[model.Resource](db.Session(ctx)).
+		Select("id", "parent_id", "dir").
+		Where("id = ? AND member_id = ?", request.Id, request.MemberId).Take(ctx)
 	if err != nil {
 		return err
 	}
 
-	title := request.Title
-
-	var counter = 1
-	for {
-		var existsId int64
-		err := gorm.G[model.Resource](db.Session(ctx)).Select("id").
-			Where("member_id = ? AND parent_id = ? AND title = ?", request.MemberId, parentId, request.Title).
-			Scan(ctx, &existsId)
-
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		if existsId == 0 {
-			break // Ok 没重复
-		}
-		request.Title = fmt.Sprintf("%s(%d)", title, counter)
-		counter++
+	title, err := s.UniqueTitle(ctx, resource.Dir, request.Title, resource.Id, request.MemberId, resource.ParentId)
+	if err != nil {
+		return err
 	}
 
-	// 更新资源名称
+	// 更新
+	params := map[string]any{
+		"update_time": util.ContextValueDefault(ctx, constant.CtxKeyRequestTime, time.Now()).UnixMilli(),
+		"title":       title,
+	}
+
+	// 文件的话，根据名称重新计算 ContentType
+	if !resource.Dir {
+		contentType := mime.TypeByExtension(filepath.Ext(title))
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		params["content_type"] = contentType
+	}
+
 	result := db.Session(ctx).
 		Table(model.Resource{}.TableName()).
-		Where("id = ?", request.Id).UpdateColumns(map[string]any{
-		"update_time": time.Now().UnixMilli(),
-		"title":       request.Title,
-	})
+		Where("id = ?", request.Id).
+		UpdateColumns(params)
+
 	if result.Error != nil {
 		return result.Error
 	}
@@ -478,7 +551,7 @@ func (s *ResourceService) Delete(ctx context.Context, request *api.ResourceDelet
 
 		if resource.Dir {
 			err := func() error {
-				// 删除的是目录，查询所有子级资源
+				// 删除的是目录，查询所有子级资源，包括自己
 				rows, err := session.Table(model.Resource{}.TableName()).
 					Select("id", "path", "object_id", "dir").
 					Where("member_id = ? AND path LIKE ?", request.MemberId, resource.Path+"%").Rows()
@@ -527,7 +600,7 @@ func (s *ResourceService) delete(ctx context.Context, resource *model.Resource) 
 		result := db.Session(ctx).
 			Table(model.Object{}.TableName()).
 			Where("id = ?", resource.ObjectId).UpdateColumns(map[string]any{
-			"update_time": time.Now().UnixMilli(),
+			"update_time": util.ContextValueDefault(ctx, constant.CtxKeyRequestTime, time.Now()).UnixMilli(),
 			"ref_count":   gorm.Expr("ref_count - ?", 1),
 		})
 		if result.Error != nil {
@@ -612,7 +685,7 @@ func (s *ResourceService) Move(ctx context.Context, request *api.ResourceMoveReq
 	}
 
 	// 更新子父级关系
-	var now = time.Now().UnixMilli()
+	var now = util.ContextValueDefault(ctx, constant.CtxKeyRequestTime, time.Now()).UnixMilli()
 
 	for _, resource := range resources {
 		// 共同的前缀
@@ -671,6 +744,7 @@ func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*api.Reso
 				t.id,
 				t.parent_id,
 				t.title,
+				t.content_type,
 				t.dir,
 				t.create_time,
 				t.update_time,
@@ -802,7 +876,7 @@ func (s *ResourceService) uploadDir(ctx context.Context, memberId int64, parentI
 			if i == len(sections)-1 {
 				// 文件
 				file.Filename = section // 重置文件名称
-				if err := s.Upload(ctx, memberId, parent.Id, file); err != nil {
+				if err := s.UploadMultipart(ctx, memberId, parent.Id, file); err != nil {
 					return err
 				}
 			} else {
@@ -979,6 +1053,183 @@ func (s *ResourceService) Download(ctx context.Context, memberId int64, resource
 	waitGroup.Wait()
 
 	return resources, nil
+}
+
+// Search 资源搜索
+func (s *ResourceService) Search(ctx context.Context, request *api.ResourceSearchRequest) (*page.Pagination[*api.ResourceSearchResponse], error) {
+	return db.PageQuery[api.ResourceSearchResponse](ctx, request.Pager, `
+			SELECT
+				t.id,
+				t.title,
+				t.content_type,
+				t.create_time,
+				t.update_time,
+				-- 文件大小
+				t1.size size,
+				-- 文件状态
+				t1.status status
+			FROM
+				t_resource t
+				LEFT JOIN t_object t1 ON t1.id = t.object_id
+			WHERE
+				t.member_id = ?
+			AND
+				t.dir = ?
+			AND
+				t.title LIKE ?
+`, []any{request.MemberId, false, "%" + request.Keywords + "%"})
+}
+
+func (s *ResourceService) Recent(ctx context.Context, request *api.ResourceRecentRequest) (*page.Pagination[*api.ResourceRecentResponse], error) {
+	statement := `
+			SELECT
+				t.id,
+				t.title,
+				t.content_type,
+				t.create_time,
+				t.update_time,
+				-- 文件大小
+				t1.size size,
+				-- 文件状态
+				t1.status status
+			FROM
+				t_resource t
+				LEFT JOIN t_object t1 ON t1.id = t.object_id
+			WHERE
+				t.member_id = ?
+			AND
+				t.dir = ?
+`
+	params := []any{request.MemberId, false}
+
+	if request.ContentType != "" {
+		statement += " AND t.content_type LIKE ?"
+		params = append(params, "%"+request.ContentType+"%")
+	}
+
+	statement += " ORDER BY t.create_time DESC"
+
+	return db.PageQuery[api.ResourceRecentResponse](ctx, request.Pager, statement, params)
+}
+
+// Group 分组查询
+func (s *ResourceService) Group(ctx context.Context, request *api.ResourceGroupRequest) (*page.Pagination[*api.ResourceGroupResponse], error) {
+
+	// 客户端时区偏移量
+	offset := util.TimeZoneOffset(
+		util.ContextValue[time.Time](ctx, constant.CtxKeyRequestTime),
+		util.ContextValueDefault(ctx, constant.CtxKeyTimezone, constant.Location),
+	)
+
+	// 分组字段
+	var groupField string
+
+	// TODO 数据库方言
+	switch request.Group {
+	case "day": // 2026-01-28
+		groupField = "date(t.create_time / 1000, 'unixepoch', '" + offset + "')"
+	case "week": // 2026-04  TODO 周的计算是从 0 开始的
+		groupField = "strftime('%Y-%W', t.create_time / 1000, 'unixepoch', '" + offset + "')"
+	case "month": // 2026-01
+		groupField = "strftime('%Y-%m', t.create_time / 1000, 'unixepoch', '" + offset + "') "
+	case "year": // 2026
+		groupField = "strftime('%Y', t.create_time / 1000, 'unixepoch', '" + offset + "')"
+	default:
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("不支持的分组查询"))
+	}
+
+	var groupConditions = []any{request.MemberId, false}
+
+	groupStatement := &strings.Builder{}
+	groupStatement.WriteString("SELECT " + groupField + " _group FROM t_resource t WHERE t.member_id = ? AND t.dir = ?")
+
+	if request.ContentType != "" {
+		groupStatement.WriteString(" AND t.content_type LIKE ?")
+		groupConditions = append(groupConditions, "%"+request.ContentType+"%")
+	}
+
+	groupStatement.WriteString(" GROUP BY _group ORDER BY _group DESC")
+
+	// 分页检索 group 列表
+	result, err := db.PageQueryScan[*api.ResourceGroupResponse](ctx,
+		request.Pager,
+		groupStatement.String(),
+		groupConditions,
+		func(row *sql.Rows) (*api.ResourceGroupResponse, error) {
+			var ret api.ResourceGroupResponse
+			return &ret, row.Scan(&ret.Group)
+		})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 检索分组下的项目
+	session := db.Session(ctx)
+
+	var itemConditions = []any{request.MemberId, false}
+
+	itemStatement := &strings.Builder{}
+	itemStatement.WriteString(`
+				SELECT
+					t.id,
+					t.title,
+					t.content_type,
+					t.create_time,
+					t.update_time,
+					-- 文件大小
+					t1.size size,
+					-- 文件状态
+					t1.status status
+				FROM
+					t_resource t
+					LEFT JOIN t_object t1 ON t1.id = t.object_id
+				WHERE
+					t.member_id = ?
+				AND
+					t.dir = ?
+			`)
+
+	if request.ContentType != "" {
+		itemStatement.WriteString(" AND t.content_type LIKE ?")
+		itemConditions = append(itemConditions, "%"+request.ContentType+"%")
+	}
+	itemStatement.WriteString(" AND " + groupField + " = ?")
+	itemStatement.WriteString(" ORDER BY t.create_time DESC")
+
+	// 检索每个分组的内容
+	waitGroup := new(sync.WaitGroup)
+	for _, row := range result.Rows {
+		waitGroup.Add(1)
+		// TODO 如果数据集过于庞大，则考虑在此处限制固定的项目数量，单独提供一个 “详情” 页面分页检索不同分组下的人项目
+		go func(row *api.ResourceGroupResponse) {
+			defer waitGroup.Done()
+
+			conditions := make([]any, len(itemConditions))
+			copy(conditions, itemConditions)
+
+			// 分组参数
+			conditions = append(conditions, row.Group)
+
+			rows, err := session.Raw(itemStatement.String(), conditions...).Rows()
+			if err != nil {
+				slog.ErrorContext(ctx, "分组资源检索异常", slog.String("err", err.Error()))
+				return
+			}
+			for rows.Next() {
+				var item api.ResourceGroupItem
+				if err := session.ScanRows(rows, &item); err != nil {
+					slog.ErrorContext(ctx, "分组资源 Scan 异常", slog.String("err", err.Error()))
+					return
+				}
+				row.Items = append(row.Items, &item)
+			}
+		}(row)
+	}
+
+	waitGroup.Wait()
+
+	return result, nil
 }
 
 var DefaultResourceService = NewResourceService(DefaultObjectService,

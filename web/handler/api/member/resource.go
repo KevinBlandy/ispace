@@ -8,6 +8,7 @@ import (
 	"io"
 	"ispace/common"
 	"ispace/common/constant"
+	"ispace/common/page"
 	"ispace/common/response"
 	"ispace/common/util"
 	"ispace/db"
@@ -19,7 +20,9 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -59,8 +62,6 @@ func (r ResourceApi) List(ctx *gin.Context) (any, error) {
 	request := &api.ResourceListRequest{
 		MemberId: ctx.GetInt64(constant.CtxKeySubject),
 		ParentId: parentId,
-		Dir:      util.BoolQuery(ctx.GetQuery("dir")),
-		Keywords: ctx.Query("keywords"),
 	}
 
 	result, err := db.Transaction(ctx.Request.Context(), func(ctx context.Context) ([]*api.ResourceListResponse, error) {
@@ -101,7 +102,7 @@ func (r ResourceApi) Upload(ctx *gin.Context) (any, error) {
 	for _, files := range multipartForm.File {
 		for _, file := range files {
 			_, err = db.Transaction(ctx.Request.Context(), func(ctx context.Context) (any, error) {
-				return nil, service.DefaultResourceService.Upload(ctx, memberId, parentId, file)
+				return nil, service.DefaultResourceService.UploadMultipart(ctx, memberId, parentId, file)
 			})
 			if err != nil {
 				return nil, err
@@ -139,7 +140,7 @@ func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
 
 	// 资源状态判断
 	if resource.Status == model.ObjectStatusDisabled {
-		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("该资源已被屏蔽"))
+		return nil, common.NewServiceError(http.StatusForbidden, response.Fail(response.CodeForbidden).WithMessage("该资源已被屏蔽"))
 	}
 
 	// 打开资源文件
@@ -155,8 +156,8 @@ func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
 	}
 
 	// 响应客户端
-	//ctx.Header("Content-Length", strconv.FormatInt(stat.Size(), 10))
-	ctx.Header("Content-Type", resource.ContentType)
+	// ctx.Header("Content-Length", strconv.FormatInt(stat.Size(), 10))
+	// ctx.Header("Content-Type", resource.ContentType)
 	if resource.Compression != model.ObjectCompressionNone {
 		ctx.Header("Content-Encoding", string(resource.Compression))
 	}
@@ -345,8 +346,8 @@ func (r ResourceApi) UploadDir(c *gin.Context) (any, error) {
 	return response.Ok(nil), nil
 }
 
-// FlashUpload ⚡️秒传
-func (r ResourceApi) FlashUpload(g *gin.Context) (any, error) {
+// UploadFlash ⚡️秒传
+func (r ResourceApi) UploadFlash(g *gin.Context) (any, error) {
 	var request = &api.ResourceFlashUploadRequest{}
 	if err := g.ShouldBindJSON(request); err != nil {
 		return nil, err
@@ -441,7 +442,7 @@ func (r ResourceApi) Unarchive(g *gin.Context) (any, error) {
 	case model.ObjectCompressionNone:
 	case model.ObjectCompressionGzip:
 		// 创建临时文件
-		tmpFile, err := os.CreateTemp("", strconv.FormatInt(resourceId, 10))
+		tmpFile, err := os.CreateTemp("", strconv.FormatInt(resourceId, 10)+"*")
 		if err != nil {
 			return nil, err
 		}
@@ -459,6 +460,11 @@ func (r ResourceApi) Unarchive(g *gin.Context) (any, error) {
 		if _, err := io.Copy(tmpFile, gzipReader); err != nil {
 			return nil, err
 		}
+
+		if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+			return nil, err
+		}
+
 		objectFile = tmpFile
 	default:
 		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("未实现的压缩格式"))
@@ -504,13 +510,12 @@ func (r ResourceApi) Unarchive(g *gin.Context) (any, error) {
 				_, _ = io.Copy(g.Writer, fileReader)
 
 				//http.ServeContent(g.Writer, g.Request, filepath.Base(f.Name), f.Modified, fileReader)
-				g.Abort()
 				return nil
 			}(f)
-
 			if err != nil {
 				return nil, err
 			}
+			g.Abort()
 			return nil, nil
 		}
 	}
@@ -562,7 +567,7 @@ func (r ResourceApi) zipTree(z *zip.Reader) []*api.ResourceUnarchiveResponse {
 
 			// 只有是文件且是路径终点时，才记录大小
 			if isLastPart && !f.FileInfo().IsDir() {
-				newNode.Size = f.UncompressedSize64
+				newNode.Size = int64(f.UncompressedSize64)
 			}
 
 			// 4. 挂载节点
@@ -582,6 +587,137 @@ func (r ResourceApi) zipTree(z *zip.Reader) []*api.ResourceUnarchiveResponse {
 		}
 	}
 	return rootEntries
+}
+
+// UploadGet 从远程服务器下载资源
+func (r ResourceApi) UploadGet(g *gin.Context) (any, error) {
+
+	objectUrl, err := url.Parse(g.Query("url"))
+	if err != nil {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源链接解析异常"))
+	}
+
+	if objectUrl.Scheme != "http" && objectUrl.Scheme != "https" {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("只能下载 http/https 协议的资源"))
+	}
+
+	memberId := g.GetInt64(constant.CtxKeySubject)
+	parentId, _ := strconv.ParseInt(g.Query("parentId"), 10, 64)
+	if parentId < 1 {
+		parentId = model.DefaultResourceParentId
+	}
+
+	// 创建临时文件
+	tmpFile, err := os.CreateTemp("", strconv.FormatInt(memberId, 10)+"-*")
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = os.RemoveAll(tmpFile.Name()) // 始终删除临时文件
+	}()
+	defer util.SafeClose(tmpFile)
+
+	// 请求资源
+	client := &http.Client{}
+	req, err := http.NewRequest(http.MethodGet, objectUrl.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "ispace/object-downloader")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer util.SafeClose(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源下载失败，状态码："+resp.Status))
+	}
+
+	// io 到临时文件
+	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+		return nil, err
+	}
+	stat, err := tmpFile.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if stat.Size() == 0 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("下载文件不能为空"))
+	}
+
+	// 解析出文件名称
+	fileName := path.Base(objectUrl.Path)
+	if fileName == "." || fileName == "/" {
+		// 解析不到路径名称的时候，则直接对整个地址进行编码作为文件名称
+		objectUrl.RawQuery = ""
+		objectUrl.Fragment = ""
+		fileName = url.QueryEscape(objectUrl.String())
+	}
+
+	err = db.TransactionWithOutResult(g.Request.Context(), func(ctx context.Context) error {
+		return service.DefaultResourceService.Upload(ctx, memberId, parentId, service.NewLocalFileResource(stat.Size(), fileName, tmpFile))
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(nil), nil
+}
+
+// Search 搜索文件
+func (r ResourceApi) Search(g *gin.Context) (any, error) {
+
+	var request = &api.ResourceSearchRequest{}
+	request.MemberId = g.GetInt64(constant.CtxKeySubject)
+	request.Keywords = strings.TrimSpace(g.Query("keywords"))
+	request.Pager = page.NewPagerFromQuery(g.Request.URL.Query())
+
+	if request.Keywords == "" {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("关键字不能为空"))
+	}
+
+	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*page.Pagination[*api.ResourceSearchResponse], error) {
+		return service.DefaultResourceService.Search(ctx, request)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(ret), nil
+}
+
+// Recent 最近文件
+func (r ResourceApi) Recent(g *gin.Context) (any, error) {
+
+	var request = &api.ResourceRecentRequest{}
+	request.Pager = page.NewPagerFromQuery(g.Request.URL.Query())
+	request.MemberId = g.GetInt64(constant.CtxKeySubject)
+	request.ContentType = g.Query("contentType")
+
+	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (any, error) {
+		return service.DefaultResourceService.Recent(ctx, request)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(ret), nil
+}
+
+// Group 按照类型分组
+func (r ResourceApi) Group(g *gin.Context) (any, error) {
+	var request = &api.ResourceGroupRequest{}
+
+	request.Pager = page.NewPagerFromQuery(g.Request.URL.Query())
+	request.MemberId = g.GetInt64(constant.CtxKeySubject)
+	request.ContentType = g.Query("contentType")
+	request.Group = g.Query("group")
+
+	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (any, error) {
+		return service.DefaultResourceService.Group(ctx, request)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(ret), nil
 }
 
 var DefaultResourceApi = sync.OnceValue(func() *ResourceApi {

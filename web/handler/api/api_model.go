@@ -1,8 +1,10 @@
 package api
 
 import (
+	"ispace/common/page"
 	"ispace/common/types"
 	"ispace/repo/model"
+	"time"
 )
 
 // MemberSignInRequest 登录
@@ -15,8 +17,8 @@ type MemberSignInRequest struct {
 type ResourceListRequest struct {
 	MemberId int64
 	ParentId int64
-	Keywords string
-	Dir      *bool
+	//Keywords string
+	//Dir      *bool
 }
 
 // ResourceTreeResponse 完整的资源树
@@ -27,14 +29,15 @@ type ResourceTreeResponse struct {
 
 // ResourceListResponse 资源列表
 type ResourceListResponse struct {
-	Id         int64              `json:"id,string"`
-	ParentId   int64              `json:"parentId,string"`   // 父级资源 ID
-	Title      string             `json:"title"`             // 资源标题
-	Dir        bool               `json:"dir"`               // 是否是目录
-	Size       int64              `json:"size,string"`       // 文件大小
-	Status     model.ObjectStatus `json:"status"`            // 文件状态
-	CreateTime int64              `json:"createTime,string"` // 创建时间
-	UpdateTime int64              `json:"updateTime,string"` // 更新时间
+	Id          int64              `json:"id,string"`
+	ParentId    int64              `json:"parentId,string"`   // 父级资源 ID
+	Title       string             `json:"title"`             // 资源标题
+	ContentType string             `json:"contentType"`       // 媒体类型
+	Dir         bool               `json:"dir"`               // 是否是目录
+	Size        int64              `json:"size,string"`       // 文件大小
+	Status      model.ObjectStatus `json:"status"`            // 文件状态
+	CreateTime  int64              `json:"createTime,string"` // 创建时间
+	UpdateTime  int64              `json:"updateTime,string"` // 更新时间
 }
 
 // ResourceMkdirRequest 创建文件夹
@@ -80,6 +83,68 @@ type ResourceUnarchiveResponse struct {
 	File    string                       `json:"file"`        // 完整的相对文件路径
 	Title   string                       `json:"title"`       // 文件名称
 	Dir     bool                         `json:"dir"`         // 是否是目录
-	Size    uint64                       `json:"size,string"` // 文件大小
+	Size    int64                        `json:"size,string"` // 文件大小
 	Entries []*ResourceUnarchiveResponse `json:"entries"`     // 子项目
+}
+
+// ResourceSearchRequest 资源搜索请求
+type ResourceSearchRequest struct {
+	Pager    *page.Pager
+	MemberId int64
+	Keywords string
+}
+
+// ResourceSearchResponse 资源搜索结果
+type ResourceSearchResponse struct {
+	Id          int64              `json:"id,string"`
+	Title       string             `json:"title"`             // 资源标题
+	ContentType string             `json:"contentType"`       // 类型
+	Size        int64              `json:"size,string"`       // 文件大小
+	Status      model.ObjectStatus `json:"status"`            // 文件状态
+	CreateTime  int64              `json:"createTime,string"` // 创建时间
+	UpdateTime  int64              `json:"updateTime,string"` // 更新时间
+}
+
+// ResourceRecentRequest 最近资源
+type ResourceRecentRequest struct {
+	Pager       *page.Pager
+	MemberId    int64
+	ContentType string // 文件类型 eg image/video/audio/text
+}
+
+// ResourceRecentResponse 最近资源
+type ResourceRecentResponse struct {
+	Id          int64              `json:"id,string"`
+	Title       string             `json:"title"`             // 资源标题
+	ContentType string             `json:"contentType"`       // 文件类型
+	Size        int64              `json:"size,string"`       // 文件大小
+	Status      model.ObjectStatus `json:"status"`            // 文件状态
+	CreateTime  int64              `json:"createTime,string"` // 创建时间
+	UpdateTime  int64              `json:"updateTime,string"` // 更新时间
+}
+
+// ResourceGroupRequest 资源分组请求
+type ResourceGroupRequest struct {
+	Pager       *page.Pager
+	MemberId    int64
+	Group       string         // 分组类型 day/week/month/year
+	ContentType string         // 资源类型
+	TimeZone    *time.Location // 客户端时区
+}
+
+// ResourceGroupItem 资源项目
+type ResourceGroupItem struct {
+	Id          int64              `json:"id,string"`
+	Title       string             `json:"title"`             // 资源标题
+	ContentType string             `json:"contentType"`       // 文件类型
+	Size        int64              `json:"size,string"`       // 文件大小
+	Status      model.ObjectStatus `json:"status"`            // 文件状态
+	CreateTime  int64              `json:"createTime,string"` // 创建时间
+	UpdateTime  int64              `json:"updateTime,string"` // 更新时间
+}
+
+// ResourceGroupResponse 资源分组响应
+type ResourceGroupResponse struct {
+	Group string               `json:"group"` // 组别
+	Items []*ResourceGroupItem `json:"items"` // 项目列表
 }

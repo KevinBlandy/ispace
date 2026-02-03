@@ -9,6 +9,9 @@ var (
 	// HttpHeaderManagerToken 管理员 Token
 	HttpHeaderManagerToken = "X-Manager-Token"
 
+	// HttpHeaderTimeZone 客户端时区
+	HttpHeaderTimeZone = "X-Time-Zone"
+
 	// HttpCookieMemberToken Cookie Token
 	HttpCookieMemberToken = "memberToken"
 	// HttpCookieManagerToken Manager Token

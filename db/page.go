@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"ispace/common/page"
 	"ispace/common/util"
 	"math"
@@ -13,14 +14,59 @@ func Count(ctx context.Context, query string, args []any, dest any) error {
 	return Session(ctx).Raw("SELECT COUNT(1) FROM ("+query+")", args...).Scan(dest).Error
 }
 
-// PageQuery 分页查询
+// PageQuery 分页查询，自动映射结构体
 func PageQuery[T any](
 	ctx context.Context,
 	pager *page.Pager,
 	query string,
 	args []any) (*page.Pagination[*T], error) {
 
-	var result = new(page.Pagination[*T])
+	session := Session(ctx)
+
+	return pageQuery(ctx, pager, query, args, func(rows *sql.Rows) ([]*T, error) {
+		var results []*T
+		for rows.Next() {
+			var item T
+			if err := session.ScanRows(rows, &item); err != nil {
+				return nil, err
+			}
+		}
+		return results, nil
+	})
+}
+
+// PageQueryScan 分页查询，手动映射数据
+func PageQueryScan[T any](
+	ctx context.Context,
+	pager *page.Pager,
+	query string,
+	args []any,
+	mapper func(rows *sql.Rows) (T, error),
+) (*page.Pagination[T], error) {
+
+	return pageQuery[T](ctx, pager, query, args, func(rows *sql.Rows) ([]T, error) {
+		var items []T
+		for rows.Next() {
+			m, err := mapper(rows)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, m)
+		}
+		return items, nil
+	})
+}
+
+// pageQuery 分页查询
+func pageQuery[T any](
+	ctx context.Context,
+	pager *page.Pager,
+	query string,
+	args []any,
+	rowsHandler func(row *sql.Rows) ([]T, error),
+) (*page.Pagination[T], error) {
+
+	var result = new(page.Pagination[T])
 
 	// 查询总数量
 	if pager.Total {
@@ -65,12 +111,10 @@ func PageQuery[T any](
 	}
 	defer util.SafeClose(rows)
 
-	for rows.Next() {
-		var item T
-		if err := session.ScanRows(rows, &item); err != nil {
-			return result, err
-		}
-		result.Rows = append(result.Rows, &item)
+	// 结果集处理
+	result.Rows, err = rowsHandler(rows)
+	if err != nil {
+		return nil, err
 	}
 	return result, nil
 }

@@ -1,5 +1,6 @@
 package model
 
+// Share 分享设置
 type Share struct {
 	Id         int64  `gorm:"primaryKey"`  // ID
 	MemberId   int64  `gorm:"index"`       // 会员 ID

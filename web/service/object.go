@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"ispace/common"
 	"ispace/common/page"
 	"ispace/common/response"
 	"ispace/db"
 	"ispace/repo/model"
+	"ispace/store"
 	"ispace/web/handler/api"
 	"net/http"
 	"strings"
@@ -97,6 +99,19 @@ func (o *ObjectService) deleteById(ctx context.Context, id int64) error {
 	}
 	// TODO 其他业务逻辑
 	return nil
+}
+
+// InvalidClean 清理无效的存储对象
+func (o *ObjectService) InvalidClean(ctx context.Context) error {
+	bucket := store.DefaultStore()
+	err := fs.WalkDir(bucket.FS(), ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		// TODO 迭代每个对象，判断是否是孤儿对象
+		return nil
+	})
+	return err
 }
 
 var DefaultObjectService = NewObjectService()

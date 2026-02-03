@@ -2,11 +2,15 @@ package constant
 
 var (
 	// CtxKeyRequestId 请求 ID
-	CtxKeyRequestId = "requestId"
+	CtxKeyRequestId = "__requestId"
 	// CtxKeyLoggerName Logger 名称
-	CtxKeyLoggerName = "logger"
+	CtxKeyLoggerName = "__logger"
 	// CtxKeySubject 当前请求中的 Subject
-	CtxKeySubject = "subject"
+	CtxKeySubject = "__subject"
+	// CtxKeyTimezone 客户端时区
+	CtxKeyTimezone = "__timezone"
+	// CtxKeyRequestTime 当前请求的时间
+	CtxKeyRequestTime = "__requestTime"
 	// CtxKeySession 当前请求中的 session
-	CtxKeySession = "session"
+	CtxKeySession = "__session"
 )
