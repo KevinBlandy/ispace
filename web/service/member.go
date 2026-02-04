@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"ispace/common"
+	"ispace/common/constant"
 	"ispace/common/id"
 	"ispace/common/page"
 	"ispace/common/response"
+	"ispace/common/util"
 	"ispace/db"
 	"ispace/repo/model"
 	"ispace/web/handler/api"
@@ -61,6 +63,7 @@ func (m *MemberService) List(ctx context.Context, request *api.MemberListRequest
 	query.WriteString(`
 				SELECT
 					id,
+					nick_name,
 					avatar,
 					account,
 					email,
@@ -139,6 +142,7 @@ func (m *MemberService) Create(ctx context.Context, request *api.MemberCreateReq
 
 	return db.Session(ctx).Create(&model.Member{
 		Id:         id.Next().Int64(),
+		NickName:   request.NickName,
 		Avatar:     "", // TODO 随机头像
 		Account:    request.Account,
 		Password:   string(password),
@@ -176,6 +180,9 @@ func (m *MemberService) Update(ctx context.Context, request *api.MemberUpdateReq
 
 	// 更新参数
 	var updateMap = make(map[string]any)
+	if request.NickName != "" {
+		updateMap["nick_name"] = request.NickName
+	}
 	if request.Account != "" {
 		updateMap["account"] = request.Account
 	}
@@ -255,6 +262,44 @@ func (m *MemberService) deleteById(ctx context.Context, memberId int64) error {
 		UpdateTime:  member.UpdateTime,
 		DeletedTime: time.Now().UnixMilli(),
 	})
+}
+
+// UpdatePassword 修改密码
+func (m *MemberService) UpdatePassword(ctx context.Context, request *api.PasswordUpdateRequest) error {
+
+	session := db.Session(ctx)
+
+	var oldPassword string
+	if err := session.Raw("SELECT password FROM t_member WHERE id = ?", request.MemberId).Scan(&oldPassword).Error; err != nil {
+		return err
+	}
+	if oldPassword == "" {
+		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("用户信息错误"))
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(oldPassword), []byte(request.OldPassword)); err != nil {
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("旧密码错误"))
+		}
+		return err
+	}
+	password, err := bcrypt.GenerateFromPassword([]byte(request.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	r := session.Exec("UPDATE t_member SET password = ?, update_time = ? WHERE id = ?",
+		string(password),
+		util.ContextValueDefault(ctx, constant.CtxKeyRequestTime, time.Now().UnixMilli()),
+		request.MemberId,
+	)
+	if r.Error != nil {
+		return r.Error
+	}
+	if r.RowsAffected < 1 {
+		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("密码更新失败"))
+	}
+	return nil
 }
 
 var DefaultMemberService = NewMemberService(DefaultResourceService)

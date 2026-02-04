@@ -3,6 +3,7 @@ package model
 // Admin 系统管理员
 type Admin struct {
 	Id         int64 `gorm:"primaryKey"`
+	NickName   string
 	Avatar     string
 	Account    string `gorm:"uniqueIndex"`
 	Password   string

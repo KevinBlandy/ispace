@@ -3,6 +3,7 @@ package model
 // Member 会员
 type Member struct {
 	Id         int64 `gorm:"primaryKey"`
+	NickName   string
 	Avatar     string
 	Account    string `gorm:"uniqueIndex"`
 	Password   string

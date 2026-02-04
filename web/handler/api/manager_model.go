@@ -22,6 +22,7 @@ type MemberListRequest struct {
 // MemberListResponse 会员列表响应
 type MemberListResponse struct {
 	Id           int64  `json:"id,string"`
+	NickName     string `json:"nickName"`
 	Avatar       string `json:"avatar"`
 	Account      string `json:"account"`
 	Email        string `json:"email"`
@@ -34,6 +35,7 @@ type MemberListResponse struct {
 
 // MemberCreateRequest 创建会员
 type MemberCreateRequest struct {
+	NickName string `json:"nickName"`
 	Account  string `json:"account"`  // 账户
 	Password string `json:"password"` // 密码
 	Email    string `json:"email"`    // 邮箱
@@ -44,6 +46,7 @@ type MemberCreateRequest struct {
 type MemberUpdateRequest struct {
 	Id int64 `json:"-"`
 	// MemberCreateRequest
+	NickName string `json:"nickName"`
 	Account  string `json:"account"`  // 账户
 	Password string `json:"password"` // 密码
 	Email    string `json:"email"`    // 邮箱

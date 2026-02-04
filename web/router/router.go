@@ -87,9 +87,15 @@ func New() http.Handler {
 		memberApi.GET("/resources/group", H(member.DefaultResourceApi().Group))               // 资源分组
 	}
 
-	// 文件 Api 接口
+	// 对象 Api 接口
 	{
 		memberApi.GET("/objects/sha256/:hash", H(member.DefaultObjectApi.Hash)) // 根据 Hash 查询文件是否存在
+	}
+
+	// 设置 Api 接口
+	{
+		memberApi.GET("/profile", NoContent)                                                   // 账户信息
+		memberApi.POST("/account/password", H(member.DefaultAccountSettingApi.UpdatePassword)) // 修改密码
 	}
 
 	// ======================================================================
