@@ -53,7 +53,7 @@ func Serve() {
 	)
 
 	// 每小时执行一次失效文件清理
-	if _, err := scheduler.AddJob("0 0 1/1 * * ? ", job.NewInvalidObjectCleaner(service.DefaultObjectService)); err != nil {
+	if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewInvalidObjectCleaner(service.DefaultObjectService)); err != nil {
 		slog.Error("Schedule 调度任务初始化异常",
 			slog.String("err", err.Error()),
 		)

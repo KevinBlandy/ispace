@@ -11,8 +11,11 @@ import (
 	"ispace/repo/model"
 	"ispace/store"
 	"ispace/web/handler/api"
+	"log/slog"
 	"net/http"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -103,12 +106,60 @@ func (o *ObjectService) deleteById(ctx context.Context, id int64) error {
 
 // InvalidClean 清理无效的存储对象
 func (o *ObjectService) InvalidClean(ctx context.Context) error {
+
+	// 7 天前
+	weekAgo := time.Now().AddDate(0, 0, -7)
+
 	bucket := store.DefaultStore()
-	err := fs.WalkDir(bucket.FS(), ".", func(path string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(bucket.FS(), ".", func(f string, d fs.DirEntry, err error) error {
+
+		// 忽略文件夹
+		if d.IsDir() {
+			return nil
+		}
+
+		// 文件信息
+		stat, err := d.Info()
 		if err != nil {
 			return err
 		}
-		// TODO 迭代每个对象，判断是否是孤儿对象
+
+		// 文件最后修改时间为 7 天前
+		if stat.ModTime().After(weekAgo) {
+			return nil
+		}
+
+		//// 相对路径
+		//relPath, err := filepath.Rel(bucket.Name(), f)
+		//if err != nil {
+		//	return err
+		//}
+
+		localFilePath := filepath.ToSlash(f)
+
+		// 检索文件是否存在
+		objectId, err := db.Transaction(ctx, func(ctx context.Context) (int64, error) {
+			var objectId int64
+			return objectId, db.Session(ctx).Raw("SELECT id FROM t_object WHERE path = ?", localFilePath).Scan(&objectId).Error
+		})
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
+		// 文件不存在，则删除无效资源
+		if objectId == 0 {
+			slog.InfoContext(ctx, "删除无效资源",
+				slog.String("path", localFilePath),
+				slog.Time("modTime", stat.ModTime()),
+			)
+			if err := bucket.Remove(f); err != nil {
+				slog.ErrorContext(ctx, "删除无效文件异常",
+					slog.String("err", err.Error()),
+					slog.String("path", localFilePath),
+				)
+				return err
+			}
+		}
 		return nil
 	})
 	return err
