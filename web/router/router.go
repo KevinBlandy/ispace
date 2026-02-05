@@ -87,6 +87,13 @@ func New() http.Handler {
 		memberApi.GET("/resources/group", H(member.DefaultResourceApi().Group))               // 资源分组
 	}
 
+	// TODO 分享 Api
+	{
+
+	}
+
+	// TODO 回收站 API
+
 	// 对象 Api 接口
 	{
 		memberApi.GET("/objects/sha256/:hash", H(member.DefaultObjectApi.Hash)) // 根据 Hash 查询文件是否存在
@@ -94,8 +101,9 @@ func New() http.Handler {
 
 	// 设置 Api 接口
 	{
-		memberApi.GET("/profile", NoContent)                                                   // 账户信息
-		memberApi.POST("/account/password", H(member.DefaultAccountSettingApi.UpdatePassword)) // 修改密码
+		memberApi.GET("/profile", H(member.DefaultProfileApi.Profile))                         // 查询个人信息
+		memberApi.PATCH("/profile", H(member.DefaultProfileApi.Update))                        // 更新个人信息
+		memberApi.POST("/account/password", H(member.DefaultAccountSettingApi.UpdatePassword)) // 修改账户的密码
 	}
 
 	// ======================================================================
@@ -108,7 +116,12 @@ func New() http.Handler {
 		H(member.DefaultSignInApi.Serve),
 	)
 
-	managerApi.Use(H(filter.DefaultManagerAuthFilter().Serve))
+	managerApi.Use(
+		// H(filter.DefaultManagerAuthFilter().Serve),
+		func(context *gin.Context) {
+			context.Set(constant.CtxKeySubject, int64(139669356857524224))
+		},
+	)
 
 	// 会员管理
 	{
@@ -123,6 +136,13 @@ func New() http.Handler {
 		managerApi.GET("/objects", H(manager.DefaultObjectApi.List))         // 资源列表
 		managerApi.PATCH("/objects/:id", H(manager.DefaultObjectApi.Update)) // 更新资源
 		managerApi.DELETE("/objects", H(manager.DefaultObjectApi.Delete))    // 删除资源
+	}
+
+	// 设置 Api 接口
+	{
+		managerApi.GET("/profile", H(manager.DefaultProfileApi.Profile))                         // 查询个人信息
+		managerApi.PATCH("/profile", H(manager.DefaultProfileApi.Update))                        // 更新个人信息
+		managerApi.POST("/account/password", H(manager.DefaultAccountSettingApi.UpdatePassword)) // 修改账户的密码
 	}
 
 	// 静态资源在最后

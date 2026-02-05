@@ -35,7 +35,7 @@ type MemberListResponse struct {
 
 // MemberCreateRequest 创建会员
 type MemberCreateRequest struct {
-	NickName string `json:"nickName"`
+	NickName string `json:"nickName"` // 昵称
 	Account  string `json:"account"`  // 账户
 	Password string `json:"password"` // 密码
 	Email    string `json:"email"`    // 邮箱
@@ -46,6 +46,7 @@ type MemberCreateRequest struct {
 type MemberUpdateRequest struct {
 	Id int64 `json:"-"`
 	// MemberCreateRequest
+	Avatar   string `json:"avatar"`
 	NickName string `json:"nickName"`
 	Account  string `json:"account"`  // 账户
 	Password string `json:"password"` // 密码
@@ -79,12 +80,38 @@ type ObjectListResponse struct {
 	UpdateTime  int64                   `json:"updateTime,string"` // 更新时间
 }
 
-// ObjectUpdateRequest 更新状态
+// ObjectUpdateRequest 更新对象请求
 type ObjectUpdateRequest struct {
 	Id     int64              `json:"-"`
 	Status model.ObjectStatus `json:"status"`
 }
 
+// ObjectDeleteRequest 对象删除请求
 type ObjectDeleteRequest struct {
 	Id types.Int64Slice `json:"id"`
+}
+
+// AdminPasswordUpdateRequest  密码修改
+type AdminPasswordUpdateRequest struct {
+	AdminId     int64  `json:"-"`
+	OldPassword string `json:"oldPassword"` // 旧密码
+	NewPassword string `json:"newPassword"` // 新密码
+}
+
+// AdminProfileResponse 个人信息
+type AdminProfileResponse struct {
+	Id       int64  `json:"id,string"`
+	NickName string `json:"nickName"`
+	Account  string `json:"account"`
+	Email    string `json:"email"`
+	Avatar   string `json:"avatar"`
+}
+
+// AdminProfileUpdateRequest 个人信息修改
+type AdminProfileUpdateRequest struct {
+	AdminId  int64  `json:"-"`
+	NickName string `json:"nickName"`
+	Account  string `json:"account"`
+	Email    string `json:"email"`
+	Avatar   string `json:"avatar"`
 }

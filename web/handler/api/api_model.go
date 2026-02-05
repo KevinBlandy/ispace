@@ -149,15 +149,15 @@ type ResourceGroupResponse struct {
 	Items []*ResourceGroupItem `json:"items"` // 项目列表
 }
 
-// PasswordUpdateRequest  密码修改
-type PasswordUpdateRequest struct {
+// MemberPasswordUpdateRequest  密码修改
+type MemberPasswordUpdateRequest struct {
 	MemberId    int64  `json:"-"`
 	OldPassword string `json:"oldPassword"` // 旧密码
 	NewPassword string `json:"newPassword"` // 新密码
 }
 
-// ProfileResponse 个人信息
-type ProfileResponse struct {
+// MemberProfileResponse 个人信息
+type MemberProfileResponse struct {
 	Id       int64  `json:"id,string"`
 	NickName string `json:"nickName"`
 	Account  string `json:"account"`
@@ -165,8 +165,8 @@ type ProfileResponse struct {
 	Avatar   string `json:"avatar"`
 }
 
-// ProfileUpdateRequest 个人信息修改
-type ProfileUpdateRequest struct {
+// MemberProfileUpdateRequest 个人信息修改
+type MemberProfileUpdateRequest struct {
 	MemberId int64  `json:"-"`
 	NickName string `json:"nickName"`
 	Account  string `json:"account"`

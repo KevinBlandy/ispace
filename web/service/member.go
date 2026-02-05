@@ -199,6 +199,9 @@ func (m *MemberService) Update(ctx context.Context, request *api.MemberUpdateReq
 	if request.Enabled != nil {
 		updateMap["enabled"] = *request.Enabled
 	}
+	if request.Avatar != "" {
+		updateMap["avatar"] = request.Avatar
+	}
 
 	if len(updateMap) == 0 {
 		return nil
@@ -265,7 +268,7 @@ func (m *MemberService) deleteById(ctx context.Context, memberId int64) error {
 }
 
 // UpdatePassword 修改密码
-func (m *MemberService) UpdatePassword(ctx context.Context, request *api.PasswordUpdateRequest) error {
+func (m *MemberService) UpdatePassword(ctx context.Context, request *api.MemberPasswordUpdateRequest) error {
 
 	session := db.Session(ctx)
 
@@ -300,6 +303,26 @@ func (m *MemberService) UpdatePassword(ctx context.Context, request *api.Passwor
 		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("密码更新失败"))
 	}
 	return nil
+}
+
+// Profile 检索会员的基本信息
+func (m *MemberService) Profile(ctx context.Context, memberId int64) (*api.MemberProfileResponse, error) {
+	var ret api.MemberProfileResponse
+	return &ret, db.Session(ctx).Raw("SELECT id, nick_name, avatar, account, email FROM t_member WHERE id = ?", memberId).
+		Row().Scan(&ret.Id, &ret.NickName, &ret.Avatar, &ret.Account, &ret.Email)
+}
+
+// UpdateProfile 更新会员的基本信息
+func (m *MemberService) UpdateProfile(ctx context.Context, request *api.MemberProfileUpdateRequest) error {
+	return m.Update(ctx, &api.MemberUpdateRequest{
+		Id:       request.MemberId,
+		Avatar:   request.Avatar,
+		NickName: request.NickName,
+		Account:  request.Account,
+		Password: "",
+		Email:    request.Email,
+		Enabled:  nil,
+	})
 }
 
 var DefaultMemberService = NewMemberService(DefaultResourceService)

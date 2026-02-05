@@ -1,4 +1,4 @@
-package member
+package manager
 
 import (
 	"context"
@@ -12,23 +12,23 @@ import (
 )
 
 type AccountSettingApi struct {
-	ms *service.MemberService
+	as *service.AdminService
 }
 
-func NewAccountSettingApi(ms *service.MemberService) *AccountSettingApi {
+func NewAccountSettingApi(ms *service.AdminService) *AccountSettingApi {
 	return &AccountSettingApi{ms}
 }
 
 // UpdatePassword 更新密码
 func (a *AccountSettingApi) UpdatePassword(g *gin.Context) (any, error) {
-	var request = new(api.MemberPasswordUpdateRequest)
+	var request = new(api.AdminPasswordUpdateRequest)
 	if err := g.ShouldBindJSON(&request); err != nil {
 		return nil, err
 	}
-	request.MemberId = g.GetInt64(constant.CtxKeySubject)
+	request.AdminId = g.GetInt64(constant.CtxKeySubject)
 
 	err := db.TransactionWithOutResult(g.Request.Context(), func(ctx context.Context) error {
-		return a.ms.UpdatePassword(ctx, request)
+		return a.as.UpdatePassword(ctx, request)
 	})
 	if err != nil {
 		return nil, err
@@ -39,4 +39,4 @@ func (a *AccountSettingApi) UpdatePassword(g *gin.Context) (any, error) {
 	return response.Ok(nil), nil
 }
 
-var DefaultAccountSettingApi = NewAccountSettingApi(service.DefaultMemberService)
+var DefaultAccountSettingApi = NewAccountSettingApi(service.DefaultAdminService)
