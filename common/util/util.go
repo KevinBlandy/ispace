@@ -4,6 +4,7 @@ import (
 	"io"
 	"ispace/common/types"
 	"maps"
+	"net/url"
 	"slices"
 	"strconv"
 )
@@ -35,10 +36,17 @@ func P[T any](value T) *T {
 }
 
 // BoolQuery 解析 bool 类型的查询参数
-func BoolQuery(value string, ok bool) *bool {
+func BoolQuery(query url.Values, name string) *bool {
+	values, ok := query[name]
 	if !ok {
-		return nil
+		return nil // 没传
 	}
+	if len(values) == 0 {
+		return nil // 传的空
+	}
+
+	var value = values[0]
+
 	var boolVal bool
 
 	if value == "" {

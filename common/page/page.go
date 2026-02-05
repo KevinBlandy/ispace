@@ -88,7 +88,7 @@ func NewPagerFromQuery(query url.Values) *Pager {
 	}
 
 	// 是否查询总数量
-	total := util.BoolQuery(query.Get("total"), len(query["total"]) > 0)
+	total := util.BoolQuery(query, "total")
 	if total == nil {
 		total = &DefaultQueryTotal
 	}

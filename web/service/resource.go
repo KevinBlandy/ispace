@@ -149,7 +149,7 @@ func (s *ResourceService) Get(ctx context.Context, memberId, resourceId int64) (
 			AND
 				t.dir = ?
 		`, resourceId, memberId, false).Row()
-	err = row.Scan(&ret.Title, &ret.Compression, &ret.ContentType, &ret.Path, &ret.Status)
+	err = row.Scan(&ret.Title, &ret.ContentType, &ret.Compression, &ret.Path, &ret.Status)
 	return
 }
 

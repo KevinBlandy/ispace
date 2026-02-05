@@ -2,12 +2,23 @@ package store
 
 import (
 	"context"
+	"ispace/common/util"
 	"ispace/config"
+	"ispace/repo/model"
 	"log/slog"
+	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
 )
+
+type File struct {
+	Title       string
+	Compression model.ObjectCompression
+	ContentType string
+	Path        string
+}
 
 // Store 文件存储实现 Store
 type Store struct {
@@ -41,6 +52,33 @@ func (s *Store) OpenFile(name string, flag int, perm os.FileMode) (*os.File, err
 		return nil, err
 	}
 	return s.Root.OpenFile(name, flag, perm)
+}
+
+// ServeContent 响应资源
+func (s *Store) ServeContent(w http.ResponseWriter, r *http.Request, resource *File) error {
+	// 打开资源文件
+	file, err := s.Open(resource.Path)
+	if err != nil {
+		return err
+	}
+	defer util.SafeClose(file)
+
+	stat, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	if resource.Compression != model.ObjectCompressionNone {
+		w.Header().Set("Content-Encoding", string(resource.Compression))
+	}
+	download := util.BoolQuery(r.URL.Query(), "download")
+
+	if download != nil && *download {
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": resource.Title}))
+	}
+
+	http.ServeContent(w, r, resource.Title, stat.ModTime(), file)
+	return nil
 }
 
 func New(dir string) (*Store, error) {

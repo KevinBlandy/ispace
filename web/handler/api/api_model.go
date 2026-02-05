@@ -78,15 +78,6 @@ type ResourceFlashUploadRequest struct {
 	Hash  string `json:"hash"`  // 资源 Hash
 }
 
-// ResourceUnarchiveResponse 文件解压响应
-type ResourceUnarchiveResponse struct {
-	File    string                       `json:"file"`        // 完整的相对文件路径
-	Title   string                       `json:"title"`       // 文件名称
-	Dir     bool                         `json:"dir"`         // 是否是目录
-	Size    int64                        `json:"size,string"` // 文件大小
-	Entries []*ResourceUnarchiveResponse `json:"entries"`     // 子项目
-}
-
 // ResourceSearchRequest 资源搜索请求
 type ResourceSearchRequest struct {
 	Pager    *page.Pager
