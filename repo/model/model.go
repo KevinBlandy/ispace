@@ -1,4 +1,4 @@
 package model
 
-// Undeleted 未删除
-const Undeleted int64 = 0
+// UnDeleted 未删除状态
+const UnDeleted int64 = 0

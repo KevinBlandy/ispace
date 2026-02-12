@@ -116,12 +116,11 @@ func (s *Store) Downloads(w http.ResponseWriter, files ...*DownloadTree) (err er
 
 		defer util.SafeClose(fileReader)
 
-		// 压缩
+		// 压缩状态判断
 		switch tree.Compression {
 		case model.ObjectCompressionNone:
 		case model.ObjectCompressionGzip:
-			fileReader, err = gzip.NewReader(file)
-			if err != nil {
+			if fileReader, err = gzip.NewReader(file); err != nil {
 				return err
 			}
 		default:

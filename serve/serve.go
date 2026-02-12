@@ -8,9 +8,7 @@ import (
 	"ispace/db"
 	"ispace/log"
 	"ispace/rdb"
-	"ispace/task/job"
 	"ispace/web/server"
-	"ispace/web/service"
 	"log/slog"
 	"net/http"
 	"os"
@@ -52,13 +50,13 @@ func Serve() {
 		cron.WithChain(cron.SkipIfStillRunning(cron.DiscardLogger)), // 当前任务执行时间超过了间隔时间，当前任务执行完毕后，等待间隔时间后，执行下次任务。
 	)
 
-	// 每小时执行一次失效文件清理
-	if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewInvalidObjectCleaner(service.DefaultObjectService)); err != nil {
-		slog.Error("Schedule 调度任务初始化异常",
-			slog.String("err", err.Error()),
-		)
-		return
-	}
+	//// 每小时执行一次失效文件清理
+	//if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewInvalidObjectCleaner(service.DefaultObjectService)); err != nil {
+	//	slog.Error("Schedule 调度任务初始化异常",
+	//		slog.String("err", err.Error()),
+	//	)
+	//	return
+	//}
 
 	scheduler.Start()
 

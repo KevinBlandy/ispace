@@ -164,3 +164,9 @@ type MemberProfileUpdateRequest struct {
 	Email    string `json:"email"`
 	Avatar   string `json:"avatar"`
 }
+
+// RecycleBinListRequest 回收站列表查询
+type RecycleBinListRequest struct {
+	MemberId int64  `json:"-"`
+	Title    string `json:"title"`
+}

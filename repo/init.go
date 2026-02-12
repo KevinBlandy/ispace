@@ -20,6 +20,7 @@ func Initialization() error {
 		&model.Resource{},
 		&model.Share{},
 		&model.ShareResource{},
+		&model.RecycleBin{},
 		&model.SysConfig{},
 	)
 }

@@ -78,7 +78,7 @@ func New() http.Handler {
 		memberApi.POST("/resources/upload/get", H(member.DefaultResourceApi().UploadGet))     // 下载远程资源
 		memberApi.POST("/resources/mkdir", H(member.DefaultResourceApi().MkDir))              // 创建目录
 		memberApi.POST("/resources/:id/rename", H(member.DefaultResourceApi().Rename))        // 重命名资源
-		memberApi.DELETE("/resources/", H(member.DefaultResourceApi().Delete))                // 删除资源
+		memberApi.DELETE("/resources", H(member.DefaultResourceApi().Delete))                 // 删除资源
 		memberApi.POST("/resources/move", H(member.DefaultResourceApi().Move))                // 移动资源
 		memberApi.GET("/resources/download", H(member.DefaultResourceApi().Download))         // 下载资源
 		memberApi.GET("/resources/:id/unarchive", H(member.DefaultResourceApi().Unarchive))   // 解压资源
@@ -93,6 +93,11 @@ func New() http.Handler {
 	}
 
 	// TODO 回收站 API
+	{
+		memberApi.GET("/recycle-bin", NoContent) // TODO 回收站列表
+		// TODO 彻底删除
+		// TODO 恢复文件
+	}
 
 	// 对象 Api 接口
 	{

@@ -198,7 +198,7 @@ func (r ResourceApi) Delete(ctx *gin.Context) (any, error) {
 		return nil, err
 	}
 	err := db.TransactionWithOutResult(ctx.Request.Context(), func(ctx context.Context) error {
-		return service.DefaultResourceService.Delete(ctx, request)
+		return service.DefaultResourceService.MoveToRecycleBin(ctx, request)
 	})
 	if err != nil {
 		return nil, err

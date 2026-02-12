@@ -2,6 +2,7 @@ package service
 
 import (
 	"compress/gzip"
+	"container/list"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -68,7 +69,7 @@ func (s *ResourceService) Compression(contentType string, size int64) bool {
 // List 查询资源列表
 func (s *ResourceService) List(ctx context.Context, request *api.ResourceListRequest) ([]*api.ResourceListResponse, error) {
 
-	var ret = make([]*api.ResourceListResponse, 0)
+	//var ret = make([]*api.ResourceListResponse, 0)
 
 	params := []any{request.MemberId}
 
@@ -105,23 +106,7 @@ func (s *ResourceService) List(ctx context.Context, request *api.ResourceListReq
 	//	params = append(params, "%"+request.Keywords+"%")
 	//}
 
-	session := db.Session(ctx)
-	rows, err := session.Raw(statement.String(), params...).Rows()
-	if err != nil {
-		return nil, err
-	}
-
-	defer util.SafeClose(rows)
-
-	for rows.Next() {
-		resource := &api.ResourceListResponse{}
-		if err := session.ScanRows(rows, resource); err != nil {
-			return nil, err
-		}
-		ret = append(ret, resource)
-	}
-
-	return ret, nil
+	return db.List[api.ResourceListResponse](ctx, statement.String(), params...)
 }
 
 // Get 获取资源信息
@@ -531,7 +516,7 @@ func (s *ResourceService) Rename(ctx context.Context, request *api.ResourceRenam
 	return nil
 }
 
-// Delete 删除资源
+// Delete 物理删除资源
 func (s *ResourceService) Delete(ctx context.Context, request *api.ResourceDeleteRequest) error {
 
 	session := db.Session(ctx)
@@ -736,8 +721,79 @@ func (s *ResourceService) Move(ctx context.Context, request *api.ResourceMoveReq
 	return nil
 }
 
-// Tree 查询完整的资源树
+// ResourceTree 资源树
+type ResourceTree struct {
+	Id          int64              `json:"id,string"`
+	ParentId    int64              `json:"parentId,string"`   // 父级资源 ID
+	Title       string             `json:"title"`             // 资源标题
+	ContentType string             `json:"contentType"`       // 媒体类型
+	Dir         bool               `json:"dir"`               // 是否是目录
+	Size        int64              `json:"size,string"`       // 文件大小
+	Status      model.ObjectStatus `json:"status"`            // 文件状态
+	CreateTime  int64              `json:"createTime,string"` // 创建时间
+	UpdateTime  int64              `json:"updateTime,string"` // 更新时间
+	Entries     []*ResourceTree    `json:"entries"`           // 子项目
+}
+
+// entries 查询某个资源下的所有资源树，使用队列检索
+func (s *ResourceService) entries(ctx context.Context, resourceId int64) ([]*ResourceTree, error) {
+	// 查询直接子记录
+	var subEntities = func(ctx context.Context, parentId int64) ([]*ResourceTree, error) {
+		return db.List[ResourceTree](ctx, `
+			SELECT
+				t.id,
+				t.parent_id,
+				t.title,
+				t.content_type,
+				t.dir,
+				t.create_time,
+				t.update_time,
+				t1.size size,
+				t1.status status
+			FROM
+				t_resource t
+				LEFT JOIN t_object t1 ON t1.id = t.object_id AND t.dir = 0
+			WHERE
+				t.parent_id = ?
+		`, parentId)
+	}
+
+	root, err := subEntities(ctx, resourceId)
+	if err != nil {
+		return nil, err
+	}
+
+	// 添加到队列
+	queue := list.New()
+	for _, item := range root {
+		if item.Dir {
+			queue.PushBack(item)
+		}
+	}
+
+	for queue.Len() > 0 {
+		item := queue.Remove(queue.Front()).(*ResourceTree)
+		// 查询子项目
+		sub, err := subEntities(ctx, item.Id)
+		if err != nil {
+			return nil, err
+		}
+		item.Entries = sub
+		// 存在子项目，则进行迭代
+		if len(item.Entries) > 0 {
+			for _, entry := range item.Entries {
+				if entry.Dir {
+					queue.PushBack(entry)
+				}
+			}
+		}
+	}
+	return root, nil
+}
+
+// Tree 查询用户完整的资源树
 func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*api.ResourceTreeResponse, error) {
+
 	session := db.Session(ctx)
 	rows, err := session.Raw(`
 			SELECT
@@ -748,7 +804,6 @@ func (s *ResourceService) Tree(ctx context.Context, memberId int64) ([]*api.Reso
 				t.dir,
 				t.create_time,
 				t.update_time,
-				-- 文件大小
 				t1.size size,
 				-- 文件状态
 				t1.status status
@@ -1165,8 +1220,6 @@ func (s *ResourceService) Group(ctx context.Context, request *api.ResourceGroupR
 	}
 
 	// 检索分组下的项目
-	session := db.Session(ctx)
-
 	var itemConditions = []any{request.MemberId, false}
 
 	itemStatement := &strings.Builder{}
@@ -1211,25 +1264,94 @@ func (s *ResourceService) Group(ctx context.Context, request *api.ResourceGroupR
 			// 分组参数
 			conditions = append(conditions, row.Group)
 
-			rows, err := session.Raw(itemStatement.String(), conditions...).Rows()
+			results, err := db.List[api.ResourceGroupItem](ctx, itemStatement.String(), conditions...)
 			if err != nil {
 				slog.ErrorContext(ctx, "分组资源检索异常", slog.String("err", err.Error()))
 				return
 			}
-			for rows.Next() {
-				var item api.ResourceGroupItem
-				if err := session.ScanRows(rows, &item); err != nil {
-					slog.ErrorContext(ctx, "分组资源 Scan 异常", slog.String("err", err.Error()))
-					return
-				}
-				row.Items = append(row.Items, &item)
-			}
+			row.Items = results
 		}(row)
 	}
 
 	waitGroup.Wait()
 
 	return result, nil
+}
+
+// MoveToRecycleBin 删除资源到回收站
+func (s *ResourceService) MoveToRecycleBin(ctx context.Context, request *api.ResourceDeleteRequest) error {
+	session := db.Session(ctx)
+
+	for _, rId := range request.Id {
+		// 检索要删除的资源
+
+		resource, err := gorm.G[*model.Resource](session).
+			Select("id", "parent_id", "member_id", "object_id", "path", "title", "content_type", "dir", "create_time").
+			Where("id = ? AND member_id = ?", rId, request.MemberId).
+			Take(context.Background())
+
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if resource.Id == 0 {
+			continue // 记录不存在，或已经被删除了
+		}
+
+		var entries []*model.Resource
+
+		// 如果是目录的话，检索所有子记录
+		if resource.Dir {
+			entries, err = gorm.G[*model.Resource](session).
+				Select("id", "parent_id", "member_id", "object_id", "path", "title", "content_type", "dir", "create_time").
+				Where("member_id = ? AND path LIKE CONCAT(?, '%') AND id <> ?", request.MemberId, resource.Path, resource.Id).
+				Find(ctx)
+			if err != nil {
+				return err
+			}
+		}
+
+		// 移动到回收站
+		if err := s.moveToRecycleBin(ctx, resource, entries); err != nil {
+			return err
+		}
+		var rIds = []int64{rId}
+		for _, entry := range entries {
+			rIds = append(rIds, entry.Id)
+		}
+
+		// 删除资源
+		_, err = gorm.G[model.Resource](session).Where("id IN ?", rIds).Delete(ctx)
+		if err != nil {
+			return err
+		}
+		// TODO 删除关联的业务数据
+	}
+	return nil
+}
+
+// moveToRecycleBin 保存到回收站
+func (s *ResourceService) moveToRecycleBin(ctx context.Context, root *model.Resource, entries []*model.Resource) error {
+
+	now := util.ContextValueDefault(ctx, constant.CtxKeyRequestTime, time.Now()).UnixMilli()
+
+	var items []*model.RecycleBin
+	for _, entry := range append(entries, root) {
+		items = append(items, &model.RecycleBin{
+			Id:                  id.Next().Int64(),
+			MemberId:            entry.MemberId,
+			Root:                util.If(entry.Id == root.Id, true, false),
+			CreateTime:          now,
+			ResourceId:          entry.Id,
+			ResourceObjectId:    entry.ObjectId,
+			ResourceParentId:    entry.ParentId,
+			ResourceTitle:       entry.Title,
+			ResourceContentType: entry.ContentType,
+			ResourceDir:         entry.Dir,
+			ResourcePath:        entry.Path,
+			ResourceCreateTime:  entry.CreateTime,
+		})
+	}
+	return gorm.G[*model.RecycleBin](db.Session(ctx)).CreateInBatches(ctx, &items, 100)
 }
 
 var DefaultResourceService = NewResourceService(DefaultObjectService,

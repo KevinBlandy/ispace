@@ -23,8 +23,6 @@ var (
 	ObjectCompressionGzip ObjectCompression = "gzip"
 	// ObjectCompressionBrotli Brotli 压缩
 	ObjectCompressionBrotli ObjectCompression = "br"
-	// ObjectCompressionUnknow 未知
-	ObjectCompressionUnknow ObjectCompression = ""
 )
 
 type ObjectStatus string
