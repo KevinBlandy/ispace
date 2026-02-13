@@ -5,8 +5,10 @@ import (
 	"errors"
 	"io/fs"
 	"ispace/common"
+	"ispace/common/constant"
 	"ispace/common/page"
 	"ispace/common/response"
+	"ispace/common/util"
 	"ispace/db"
 	"ispace/repo/model"
 	"ispace/store"
@@ -163,6 +165,24 @@ func (o *ObjectService) InvalidClean(ctx context.Context) error {
 		return nil
 	})
 	return err
+}
+
+// UpdateRefCount 更新 Ref 引用
+func (o *ObjectService) UpdateRefCount(ctx context.Context, id int64, count int64) error {
+	// 更新引用
+	result := db.Session(ctx).
+		Table(model.Object{}.TableName()).
+		Where("id = ?", id).UpdateColumns(map[string]any{
+		"update_time": util.ContextValueDefault(ctx, constant.CtxKeyRequestTime, time.Now()).UnixMilli(),
+		"ref_count":   gorm.Expr("ref_count + ?", count),
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("存储引用更新失败"))
+	}
+	return nil
 }
 
 var DefaultObjectService = NewObjectService()

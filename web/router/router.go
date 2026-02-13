@@ -92,11 +92,11 @@ func New() http.Handler {
 
 	}
 
-	// TODO 回收站 API
+	// 回收站 API
 	{
-		memberApi.GET("/recycle-bin", NoContent) // TODO 回收站列表
-		// TODO 彻底删除
-		// TODO 恢复文件
+		memberApi.GET("/recycle-bin", H(member.DefaultRecycleBinApi.List))             //  回收站列表
+		memberApi.DELETE("/recycle-bin", H(member.DefaultRecycleBinApi.Delete))        //  彻底删除文件
+		memberApi.POST("/recycle-bin/restore", H(member.DefaultRecycleBinApi.Restore)) // 恢复文件
 	}
 
 	// 对象 Api 接口

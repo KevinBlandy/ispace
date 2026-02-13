@@ -30,6 +30,7 @@ func PageQuery[T any](
 			if err := session.ScanRows(rows, &item); err != nil {
 				return nil, err
 			}
+			results = append(results, &item)
 		}
 		return results, nil
 	})

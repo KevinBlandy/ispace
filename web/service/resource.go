@@ -202,21 +202,7 @@ func (s *ResourceService) NewObjectRef(ctx context.Context, memberId, parentId, 
 	}
 
 	// 更新引用
-	result := db.Session(ctx).
-		Table(model.Object{}.TableName()).
-		Where("id = ?", objectId).UpdateColumns(map[string]any{
-		"update_time": now,
-		"ref_count":   gorm.Expr("ref_count + ?", 1),
-	})
-
-	if result.Error != nil {
-		return result.Error
-	}
-
-	if result.RowsAffected != 1 {
-		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("存储引用更新失败"))
-	}
-	return nil
+	return s.objectService.UpdateRefCount(ctx, objectId, 1)
 }
 
 // Resource 资源描述
@@ -581,20 +567,7 @@ func (s *ResourceService) delete(ctx context.Context, resource *model.Resource) 
 	}
 
 	if !resource.Dir {
-		// 更新引用
-		result := db.Session(ctx).
-			Table(model.Object{}.TableName()).
-			Where("id = ?", resource.ObjectId).UpdateColumns(map[string]any{
-			"update_time": util.ContextValueDefault(ctx, constant.CtxKeyRequestTime, time.Now()).UnixMilli(),
-			"ref_count":   gorm.Expr("ref_count - ?", 1),
-		})
-		if result.Error != nil {
-			return result.Error
-		}
-
-		if result.RowsAffected != 1 {
-			return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("存储引用更新失败"))
-		}
+		return s.objectService.UpdateRefCount(ctx, resource.ObjectId, -1)
 	}
 
 	// TODO 关联的业务数据处理

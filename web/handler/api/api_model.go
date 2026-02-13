@@ -167,6 +167,31 @@ type MemberProfileUpdateRequest struct {
 
 // RecycleBinListRequest 回收站列表查询
 type RecycleBinListRequest struct {
-	MemberId int64  `json:"-"`
-	Title    string `json:"title"`
+	Pager    *page.Pager `json:"pager"` // 分页
+	MemberId int64       `json:"-"`     // 会员 Id
+	Title    string      `json:"title"` // 文件标题
+}
+
+// RecycleBinListResponse 回收站列表响应
+type RecycleBinListResponse struct {
+	Id          int64              `json:"id,string"`         // ID
+	Title       string             `json:"title"`             // 资源标题
+	ContentType string             `json:"contentType"`       // 媒体类型
+	Dir         bool               `json:"dir"`               // 是否是目录
+	Size        int64              `json:"size,string"`       // 文件大小
+	Status      model.ObjectStatus `json:"status"`            // 文件状态
+	CreateTime  int64              `json:"createTime,string"` // 创建时间
+}
+
+// RecycleBinDeleteRequest 删除回收站文件
+type RecycleBinDeleteRequest struct {
+	MemberId int64            `json:"-"` // 会员 Id
+	Id       types.Int64Slice `json:"id,string"`
+}
+
+// RecycleBinRestoreRequest 文件恢复请求
+type RecycleBinRestoreRequest struct {
+	MemberId int64            `json:"-"`
+	Id       types.Int64Slice `json:"id,string"`       // 要恢复的记录的 ID，只能是 root 级别的账户
+	ParentId *int64           `json:"parentId,string"` // 要恢复到的目录 ID，如果为 0 则表示为根目录，默认为删除前的目录
 }
