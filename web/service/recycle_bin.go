@@ -70,8 +70,9 @@ func (s RecycleBinService) Delete(ctx context.Context, request *api.RecycleBinDe
 
 	session := db.Session(ctx)
 	results, err := gorm.G[*model.RecycleBin](session).
-		Select("id", "root", "resource_object_id", "resource_dir", "resource_path").
+		Select("id", "root", "resource_id", "resource_object_id", "resource_dir").
 		Where(query.String(), params...).
+		Order("create_time DESC").
 		Find(ctx)
 
 	if err != nil {
@@ -93,21 +94,22 @@ func (s RecycleBinService) Remove(ctx context.Context, m *model.RecycleBin) erro
 
 	session := db.Session(ctx)
 	if m.ResourceDir {
-		// 是目录的情况下，检索所有子记录
+		// 递归删除不包含 root 的子项目
 		results, err := gorm.G[*model.RecycleBin](session).
-			Select("id", "root", "resource_object_id", "resource_dir").
-			Where("resource_path LIKE ?", m.ResourcePath+"%"). // 包含自己
+			Select("id", "root", "resource_id", "resource_object_id", "resource_dir").
+			Where("resource_parent_id = ? AND root = ?", m.ResourceId, false).
 			Find(ctx)
+
 		if err != nil {
 			return err
 		}
+
 		for _, result := range results {
-			// 删除资源
-			if err := s.delete(ctx, result); err != nil {
+			// 递归删除元素
+			if err := s.Remove(ctx, result); err != nil {
 				return err
 			}
 		}
-		return nil
 	}
 
 	return s.delete(ctx, m)
