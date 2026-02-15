@@ -1259,7 +1259,7 @@ func (s *ResourceService) MoveToRecycleBin(ctx context.Context, request *api.Res
 		// 检索要删除的资源
 
 		resource, err := gorm.G[*model.Resource](session).
-			Select("id", "parent_id", "member_id", "object_id", "path", "title", "content_type", "dir", "create_time").
+			Select("id", "parent_id", "member_id", "object_id", "path", "depth", "title", "content_type", "dir", "create_time").
 			Where("id = ? AND member_id = ?", rId, request.MemberId).
 			Take(context.Background())
 
@@ -1275,7 +1275,7 @@ func (s *ResourceService) MoveToRecycleBin(ctx context.Context, request *api.Res
 		// 如果是目录的话，检索所有子记录
 		if resource.Dir {
 			entries, err = gorm.G[*model.Resource](session).
-				Select("id", "parent_id", "member_id", "object_id", "path", "title", "content_type", "dir", "create_time").
+				Select("id", "parent_id", "member_id", "object_id", "path", "depth", "title", "content_type", "dir", "create_time").
 				Where("member_id = ? AND path LIKE CONCAT(?, '%') AND id <> ?", request.MemberId, resource.Path, resource.Id).
 				Find(ctx)
 			if err != nil {
@@ -1287,12 +1287,12 @@ func (s *ResourceService) MoveToRecycleBin(ctx context.Context, request *api.Res
 		if err := s.moveToRecycleBin(ctx, resource, entries); err != nil {
 			return err
 		}
+
+		// 删除资源
 		var rIds = []int64{rId}
 		for _, entry := range entries {
 			rIds = append(rIds, entry.Id)
 		}
-
-		// 删除资源
 		_, err = gorm.G[model.Resource](session).Where("id IN ?", rIds).Delete(ctx)
 		if err != nil {
 			return err
@@ -1321,6 +1321,7 @@ func (s *ResourceService) moveToRecycleBin(ctx context.Context, root *model.Reso
 			ResourceContentType: entry.ContentType,
 			ResourceDir:         entry.Dir,
 			ResourcePath:        entry.Path,
+			ResourceDepth:       entry.Depth,
 			ResourceCreateTime:  entry.CreateTime,
 		})
 	}

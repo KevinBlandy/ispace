@@ -94,8 +94,9 @@ func New() http.Handler {
 
 	// 回收站 API
 	{
-		memberApi.GET("/recycle-bin", H(member.DefaultRecycleBinApi.List))             //  回收站列表
-		memberApi.DELETE("/recycle-bin", H(member.DefaultRecycleBinApi.Delete))        //  彻底删除文件
+		memberApi.GET("/recycle-bin", H(member.DefaultRecycleBinApi.List)) // 回收站列表
+		// TODO 查询资源目录树
+		memberApi.DELETE("/recycle-bin", H(member.DefaultRecycleBinApi.Delete))        // 彻底删除文件
 		memberApi.POST("/recycle-bin/restore", H(member.DefaultRecycleBinApi.Restore)) // 恢复文件
 	}
 

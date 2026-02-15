@@ -1,21 +1,28 @@
 package service
 
 import (
+	"container/list"
 	"context"
+	"errors"
 	"ispace/common"
+	"ispace/common/constant"
 	"ispace/common/page"
 	"ispace/common/response"
+	"ispace/common/util"
 	"ispace/db"
 	"ispace/repo/model"
 	"ispace/web/handler/api"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
 
 type RecycleBinService struct {
-	objectService *ObjectService
+	objectService   *ObjectService
+	resourceService *ResourceService
 }
 
 /*
@@ -88,6 +95,10 @@ func (s RecycleBinService) Delete(ctx context.Context, request *api.RecycleBinDe
 }
 
 // Remove 删除回收站的内容
+// id
+// ResourceId
+// ResourceDir
+// ResourceObjectId
 func (s RecycleBinService) Remove(ctx context.Context, m *model.RecycleBin) error {
 
 	// TODO 聚合，批量执行
@@ -134,4 +145,169 @@ func (s RecycleBinService) delete(ctx context.Context, m *model.RecycleBin) erro
 	return s.objectService.UpdateRefCount(ctx, m.ResourceObjectId, -1)
 }
 
-var DefaultRecycleBinService = &RecycleBinService{objectService: DefaultObjectService}
+// Restore 恢复文件
+// 只能恢复 root 项目
+// 如果是恢复所有，则按照删除时间逆序进行恢复
+func (s RecycleBinService) Restore(ctx context.Context, request *api.RecycleBinRestoreRequest) error {
+
+	var query = &strings.Builder{}
+	var params []any
+
+	// 如果没传 ID，则表示删除所有
+	if len(request.Id) > 0 {
+		query.WriteString("id IN ? AND ")
+		params = append(params, request.Id)
+	}
+
+	query.WriteString("member_id = ? AND root = ?") // 只能恢复 root 项目
+	params = append(params, request.MemberId, true)
+
+	session := db.Session(ctx)
+	results, err := gorm.G[*model.RecycleBin](session).
+		Where(query.String(), params...).
+		Order("create_time DESC").
+		Find(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	for _, result := range results {
+
+		// 子项目
+		var entries []*model.RecycleBin
+
+		// 是目录的话，检索其所有的非 root 级子项目
+		if result.ResourceDir {
+
+			queue := list.New()
+
+			subEntries, err := gorm.G[*model.RecycleBin](session).
+				Where("resource_parent_id = ? AND root = ?", result.ResourceId, false).
+				Find(ctx)
+			if err != nil {
+				return err
+			}
+
+			for _, entry := range subEntries {
+				entries = append(entries, entry)
+				if entry.ResourceDir {
+					queue.PushBack(entry)
+				}
+			}
+			for queue.Len() > 0 {
+				item := queue.Remove(queue.Front()).(*model.RecycleBin)
+				subEntries, err = gorm.G[*model.RecycleBin](session).
+					Where("resource_parent_id = ? AND root = ?", item.ResourceId, false).
+					Find(ctx)
+				if err != nil {
+					return err
+				}
+
+				for _, entry := range subEntries {
+					entries = append(entries, entry)
+					if entry.ResourceDir {
+						queue.PushBack(entry)
+					}
+				}
+			}
+		}
+
+		// 执行恢复
+		if err := s.restore(ctx, result, entries); err != nil {
+			return err
+		}
+
+		// 删除回收站资源
+		var ids = []int64{result.Id}
+		for _, entry := range entries {
+			ids = append(ids, entry.Id)
+		}
+		if _, err := gorm.G[*model.RecycleBin](session).Where("id IN ?", ids).Delete(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// restore 恢复文件
+func (s RecycleBinService) restore(ctx context.Context, root *model.RecycleBin, entries []*model.RecycleBin) error {
+
+	now := util.ContextValueDefault(ctx, constant.CtxKeyRequestTime, time.Now()).UnixMilli()
+
+	var noChange bool
+
+	session := db.Session(ctx)
+
+	// 检索删除前的父资源
+	if root.ResourceParentId != model.DefaultResourceParentId {
+		// 检索父目录
+		parent, err := gorm.G[model.Resource](session).
+			Select("id", "path").
+			Where("id = ? AND member_id = ?", root.ResourceParentId, root.MemberId).
+			Take(ctx)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		// 父目录存在，且没移动过位置，则直接恢复记录
+		if parent.Id > 0 && strings.HasPrefix(root.ResourcePath, parent.Path) {
+			noChange = true
+		}
+	} else {
+		noChange = true
+	}
+
+	// 父目录移动过位置，则恢复到根目录
+	if !noChange {
+
+		// 结构树的共同前缀
+		prefix := strings.TrimSuffix(root.ResourcePath, strconv.FormatInt(root.ResourceId, 10)+model.ResourcePathSeparator)
+
+		// root 资源移动到根目录
+		root.ResourceParentId = model.DefaultResourceParentId
+
+		// 重名处理
+		var err error
+		root.ResourceTitle, err = s.resourceService.UniqueTitle(ctx,
+			root.ResourceDir,
+			root.ResourceTitle,
+			root.ResourceId,
+			root.MemberId,
+			root.ResourceParentId,
+		)
+		if err != nil {
+			return err
+		}
+
+		// 修改所有子结构
+		for _, entry := range append(entries, root) {
+			entry.ResourcePath = strings.ReplaceAll(entry.ResourcePath, prefix, "")
+			entry.ResourceDepth = entry.ResourceDepth - root.ResourceDepth
+		}
+	}
+
+	// 恢复资源
+	var resources []*model.Resource
+	for _, entry := range append(entries, root) {
+		resources = append(resources, &model.Resource{
+			Id:          entry.ResourceId, // TODO 保持资源 ID 不变？
+			ObjectId:    entry.ResourceObjectId,
+			ParentId:    entry.ResourceParentId,
+			Title:       entry.ResourceTitle,
+			ContentType: entry.ResourceContentType,
+			Dir:         entry.ResourceDir,
+			Path:        entry.ResourcePath,
+			Depth:       entry.ResourceDepth,
+			CreateTime:  entry.ResourceCreateTime,
+
+			MemberId:   entry.MemberId,
+			UpdateTime: now,
+		})
+	}
+	return gorm.G[*model.Resource](session).CreateInBatches(ctx, &resources, 100)
+}
+
+var DefaultRecycleBinService = &RecycleBinService{
+	objectService:   DefaultObjectService,
+	resourceService: DefaultResourceService,
+}

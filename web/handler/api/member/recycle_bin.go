@@ -55,9 +55,14 @@ func (r RecycleBinApi) Restore(g *gin.Context) (any, error) {
 		return nil, err
 	}
 
-	// 只能恢复 root 项目
-	// 如果是恢复所有，则按照删除时间逆序进行恢复
+	request.MemberId = g.GetInt64(constant.CtxKeySubject)
 
+	err := db.TransactionWithOutResult(g.Request.Context(), func(ctx context.Context) error {
+		return r.service.Restore(ctx, request)
+	})
+	if err != nil {
+		return nil, err
+	}
 	return response.Ok(nil), nil
 }
 

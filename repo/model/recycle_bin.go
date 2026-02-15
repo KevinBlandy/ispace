@@ -15,6 +15,7 @@ type RecycleBin struct {
 	ResourceContentType string // 媒体类型
 	ResourceDir         bool   // 是否是目录
 	ResourcePath        string // 路径
+	ResourceDepth       uint64 // 深度
 	ResourceCreateTime  int64  // 资源创建时间
 }
 

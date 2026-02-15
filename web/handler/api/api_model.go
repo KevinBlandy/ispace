@@ -192,6 +192,6 @@ type RecycleBinDeleteRequest struct {
 // RecycleBinRestoreRequest 文件恢复请求
 type RecycleBinRestoreRequest struct {
 	MemberId int64            `json:"-"`
-	Id       types.Int64Slice `json:"id,string"`       // 要恢复的记录的 ID，只能是 root 级别的账户
-	ParentId *int64           `json:"parentId,string"` // 要恢复到的目录 ID，如果为 0 则表示为根目录，默认为删除前的目录
+	Id       types.Int64Slice `json:"id,string"` // 要恢复的记录的 ID，只能是 root 级别的账户
+	//	ParentId *int64           `json:"parentId,string"` // 要恢复到的目录 ID，如果为 0 则表示为根目录，默认为删除前的目录
 }
