@@ -111,6 +111,7 @@ func (s *ResourceService) List(ctx context.Context, request *api.ResourceListReq
 
 // Get 获取资源信息
 func (s *ResourceService) Get(ctx context.Context, memberId, resourceId int64) (ret struct {
+	Id          int64
 	Title       string                  // 文件标题
 	Compression model.ObjectCompression // 压缩方式
 	ContentType string                  // 文件类型
@@ -119,6 +120,7 @@ func (s *ResourceService) Get(ctx context.Context, memberId, resourceId int64) (
 }, err error) {
 	row := db.Session(ctx).Raw(`
 			SELECT
+				t.id,
 				t.title,
 				t.content_type,
 				t1.compression,
@@ -134,7 +136,7 @@ func (s *ResourceService) Get(ctx context.Context, memberId, resourceId int64) (
 			AND
 				t.dir = ?
 		`, resourceId, memberId, false).Row()
-	err = row.Scan(&ret.Title, &ret.ContentType, &ret.Compression, &ret.Path, &ret.Status)
+	err = row.Scan(&ret.Id, &ret.Title, &ret.ContentType, &ret.Compression, &ret.Path, &ret.Status)
 	return
 }
 
@@ -1251,36 +1253,49 @@ func (s *ResourceService) Group(ctx context.Context, request *api.ResourceGroupR
 	return result, nil
 }
 
+// rootAndEntries 检索资源以及所有子级资源
+func (s *ResourceService) rootAndEntries(ctx context.Context, memberId, resourceId int64) (*model.Resource, []*model.Resource, error) {
+
+	session := db.Session(ctx)
+
+	resource, err := gorm.G[*model.Resource](session).
+		Select("id", "parent_id", "member_id", "object_id", "path", "depth", "title", "content_type", "dir", "create_time").
+		Where("id = ? AND member_id = ?", resourceId, memberId).
+		Take(context.Background())
+
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil, err
+	}
+	if resource.Id == 0 {
+		return nil, nil, err // 记录不存在，或已经被删除了
+	}
+
+	// 如果是目录的话，检索所有子记录
+	var entries []*model.Resource
+	if resource.Dir {
+		entries, err = gorm.G[*model.Resource](session).
+			Select("id", "parent_id", "member_id", "object_id", "path", "depth", "title", "content_type", "dir", "create_time").
+			Where("member_id = ? AND path LIKE CONCAT(?, '%') AND id <> ?", memberId, resource.Path, resource.Id).
+			Find(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return resource, entries, nil
+}
+
 // MoveToRecycleBin 删除资源到回收站
 func (s *ResourceService) MoveToRecycleBin(ctx context.Context, request *api.ResourceDeleteRequest) error {
 	session := db.Session(ctx)
 
 	for _, rId := range request.Id {
 		// 检索要删除的资源
-
-		resource, err := gorm.G[*model.Resource](session).
-			Select("id", "parent_id", "member_id", "object_id", "path", "depth", "title", "content_type", "dir", "create_time").
-			Where("id = ? AND member_id = ?", rId, request.MemberId).
-			Take(context.Background())
-
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		resource, entries, err := s.rootAndEntries(ctx, request.MemberId, rId)
+		if err != nil {
 			return err
 		}
-		if resource.Id == 0 {
-			continue // 记录不存在，或已经被删除了
-		}
-
-		var entries []*model.Resource
-
-		// 如果是目录的话，检索所有子记录
-		if resource.Dir {
-			entries, err = gorm.G[*model.Resource](session).
-				Select("id", "parent_id", "member_id", "object_id", "path", "depth", "title", "content_type", "dir", "create_time").
-				Where("member_id = ? AND path LIKE CONCAT(?, '%') AND id <> ?", request.MemberId, resource.Path, resource.Id).
-				Find(ctx)
-			if err != nil {
-				return err
-			}
+		if resource == nil {
+			continue // 不存在或已被删除
 		}
 
 		// 移动到回收站
@@ -1326,6 +1341,24 @@ func (s *ResourceService) moveToRecycleBin(ctx context.Context, root *model.Reso
 		})
 	}
 	return gorm.G[*model.RecycleBin](db.Session(ctx)).CreateInBatches(ctx, &items, 100)
+}
+
+// Share 资源分享
+func (s *ResourceService) Share(ctx context.Context, request *api.ResourceShareRequest) error {
+	for _, rId := range request.Id {
+		resource, entries, err := s.rootAndEntries(ctx, request.MemberId, rId)
+		if err != nil {
+			return err
+		}
+		if resource == nil {
+			// 资源已经被删除
+			return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源不存在"))
+		}
+
+		// TODO 执行分享
+		_ = entries
+	}
+	return nil
 }
 
 var DefaultResourceService = NewResourceService(DefaultObjectService,

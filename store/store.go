@@ -68,6 +68,9 @@ func (s *Store) ServeContent(w http.ResponseWriter, r *http.Request, resource *F
 		return err
 	}
 
+	if resource.ContentType != "" {
+		w.Header().Set("Content-Type", resource.ContentType)
+	}
 	if resource.Compression != model.ObjectCompressionNone {
 		w.Header().Set("Content-Encoding", string(resource.Compression))
 	}

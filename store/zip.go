@@ -70,8 +70,8 @@ func (s *Store) archiveFile(ctx context.Context, resource *File) (*os.File, erro
 }
 
 // ArchiveTree 返回压缩文件的树结构
-func (s *Store) ArchiveTree(resource *File) ([]*ArchiveTree, error) {
-	objectFile, err := s.Open(resource.Path)
+func (s *Store) ArchiveTree(path string) ([]*ArchiveTree, error) {
+	objectFile, err := s.Open(path)
 	if err != nil {
 		return nil, err
 	}
@@ -89,8 +89,8 @@ func (s *Store) ArchiveTree(resource *File) ([]*ArchiveTree, error) {
 }
 
 // ServeArchiveFile 读取压缩文件中的内容
-func (s *Store) ServeArchiveFile(w http.ResponseWriter, r *http.Request, resource *File, file string) error {
-	objectFile, err := s.Open(resource.Path)
+func (s *Store) ServeArchiveFile(w http.ResponseWriter, r *http.Request, path, file string) error {
+	objectFile, err := s.Open(path)
 	if err != nil {
 		return err
 	}

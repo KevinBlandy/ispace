@@ -8,9 +8,9 @@ type RecycleBin struct {
 	CreateTime int64 // 进入回收站的时间
 
 	// 资源快照
-	ResourceId          int64  // 资源对象 ID
+	ResourceId          int64  `gorm:"index"` // 资源对象 ID
 	ResourceObjectId    int64  // 资源引用对象 ID
-	ResourceParentId    int64  // 父级资源 ID
+	ResourceParentId    int64  `gorm:"index"` // 父级资源 ID
 	ResourceTitle       string // 资源标题
 	ResourceContentType string // 媒体类型
 	ResourceDir         bool   // 是否是目录

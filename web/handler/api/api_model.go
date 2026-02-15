@@ -206,3 +206,9 @@ type RecycleBinEntryResponse struct {
 	Status      model.ObjectStatus `json:"status"`            // 文件状态
 	CreateTime  int64              `json:"createTime,string"` // 创建时间
 }
+
+// ResourceShareRequest 资源分享请求
+type ResourceShareRequest struct {
+	MemberId int64            `json:"-"`         // 会员 ID
+	Id       types.Int64Slice `json:"id,string"` // 要分享的资源 ID 列表
+}

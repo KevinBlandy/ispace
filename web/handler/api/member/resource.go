@@ -2,6 +2,7 @@ package member
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"io"
 	"ispace/common"
@@ -108,8 +109,8 @@ func (r ResourceApi) Upload(ctx *gin.Context) (any, error) {
 	return response.Ok(nil), nil
 }
 
-// Get 读取资
-func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
+// Content 读取资
+func (r ResourceApi) Content(ctx *gin.Context) (any, error) {
 	// 会员 ID
 	var memberId = ctx.GetInt64(constant.CtxKeySubject)
 	// 资源 ID
@@ -119,6 +120,7 @@ func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
 	}
 
 	resource, err := db.Transaction(ctx.Request.Context(), func(ctx context.Context) (struct {
+		Id          int64
 		Title       string
 		Compression model.ObjectCompression
 		ContentType string
@@ -127,11 +129,12 @@ func (r ResourceApi) Get(ctx *gin.Context) (any, error) {
 	}, error) {
 		return service.DefaultResourceService.Get(ctx, memberId, resourceId)
 	}, db.TxReadOnly)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			err = common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("资源不存在"))
-		}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
+	}
+
+	if resource.Id < 1 {
+		return nil, common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("资源不存在"))
 	}
 
 	// 资源状态判断
@@ -379,6 +382,7 @@ func (r ResourceApi) Unarchive(g *gin.Context) (any, error) {
 
 	// 检索资源
 	resource, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (struct {
+		Id          int64
 		Title       string
 		Compression model.ObjectCompression
 		ContentType string
@@ -406,12 +410,7 @@ func (r ResourceApi) Unarchive(g *gin.Context) (any, error) {
 
 	// 返回树结构
 	if file == "" {
-		ret, err := store.DefaultStore().ArchiveTree(&store.File{
-			Title:       resource.Title,
-			Compression: resource.Compression,
-			ContentType: resource.ContentType,
-			Path:        resource.Path,
-		})
+		ret, err := store.DefaultStore().ArchiveTree(resource.Path)
 		if err != nil {
 			return nil, err
 		}
@@ -421,12 +420,7 @@ func (r ResourceApi) Unarchive(g *gin.Context) (any, error) {
 	// 读取文件
 	g.Abort()
 
-	return nil, store.DefaultStore().ServeArchiveFile(g.Writer, g.Request, &store.File{
-		Title:       resource.Title,
-		Compression: resource.Compression,
-		ContentType: resource.ContentType,
-		Path:        resource.Path,
-	}, file)
+	return nil, store.DefaultStore().ServeArchiveFile(g.Writer, g.Request, resource.Path, file)
 }
 
 // UploadGet 从远程服务器下载资源
@@ -558,6 +552,23 @@ func (r ResourceApi) Group(g *gin.Context) (any, error) {
 		return nil, err
 	}
 	return response.Ok(ret), nil
+}
+
+// Share 资源分享
+func (r ResourceApi) Share(g *gin.Context) (any, error) {
+	request := &api.ResourceShareRequest{
+		MemberId: g.GetInt64(constant.CtxKeySubject),
+	}
+	if err := g.ShouldBindJSON(request); err != nil {
+		return nil, err
+	}
+	err := db.TransactionWithOutResult(g.Request.Context(), func(ctx context.Context) error {
+		return service.DefaultResourceService.Share(ctx, request)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(request.MemberId), nil
 }
 
 var DefaultResourceApi = sync.OnceValue(func() *ResourceApi {

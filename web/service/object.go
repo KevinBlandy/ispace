@@ -97,13 +97,15 @@ func (o *ObjectService) deleteById(ctx context.Context, id int64) error {
 		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源不存在"))
 	}
 
-	// 删除关联的数据
+	// 删除资源数据
 	_, err = gorm.G[model.Resource](db.Session(ctx)).Where("object_id = ?", id).Delete(ctx)
 	if err != nil {
 		return err
 	}
+	// 删除回收站数据
+	_, err = gorm.G[model.RecycleBin](db.Session(ctx)).Where("recource_object_id = ?", id).Delete(ctx)
 	// TODO 其他业务逻辑
-	return nil
+	return err
 }
 
 // InvalidClean 清理无效的存储对象

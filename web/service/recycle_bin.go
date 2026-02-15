@@ -332,6 +332,33 @@ func (s RecycleBinService) Entries(ctx context.Context, memberId int64, id int64
 `, true, memberId, id, false)
 }
 
+// GetObject 查询回收站项目对象
+func (s RecycleBinService) GetObject(ctx context.Context, memberId int64, id int64) (ret struct {
+	Id          int64
+	Title       string
+	Status      model.ObjectStatus
+	Path        string
+	Compression model.ObjectCompression
+}, err error) {
+
+	err = db.Session(ctx).Raw(`SELECT
+		t.id,
+		t.resource_title title,
+		t1.status,
+		t1.compression,
+		t1.path
+	FROM
+		t_recycle_bin t
+	INNER JOIN t_object t1 ON t1.id = t.resource_object_id
+	WHERE
+		t.id = ?
+	AND
+		t.member_id = ?
+	AND
+		t.resource_dir = ?`, id, memberId, false).Row().Scan(&ret.Id, &ret.Title, &ret.Status, &ret.Compression, &ret.Path)
+	return
+}
+
 var DefaultRecycleBinService = &RecycleBinService{
 	objectService:   DefaultObjectService,
 	resourceService: DefaultResourceService,

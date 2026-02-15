@@ -71,7 +71,7 @@ func New() http.Handler {
 	{
 		memberApi.GET("/resources/tree", H(member.DefaultResourceApi().Tree))                 // 完整的文件树
 		memberApi.GET("/resources", H(member.DefaultResourceApi().List))                      // 资源列表
-		memberApi.GET("/resources/:id", H(member.DefaultResourceApi().Get))                   // 读取资源
+		memberApi.GET("/resources/:id", H(member.DefaultResourceApi().Content))               // 读取资源
 		memberApi.POST("/resources/upload", H(member.DefaultResourceApi().Upload))            // 上传单个资源
 		memberApi.POST("/resources/upload/flash", H(member.DefaultResourceApi().UploadFlash)) // 快传资源
 		memberApi.POST("/resources/upload/dir", H(member.DefaultResourceApi().UploadDir))     // 上传文件夹
@@ -85,16 +85,20 @@ func New() http.Handler {
 		memberApi.GET("/resources/search", H(member.DefaultResourceApi().Search))             // 搜索资源
 		memberApi.GET("/resources/recent", H(member.DefaultResourceApi().Recent))             // 最近上传
 		memberApi.GET("/resources/group", H(member.DefaultResourceApi().Group))               // 资源分组
+		memberApi.POST("/resources/share", H(member.DefaultResourceApi().Share))              // 资源分享
 	}
 
-	// TODO 分享 Api
+	// 分享 Api
 	{
-
+		memberApi.GET("/share", NoContent) // 分享列表
+		// TODO 添加新的分享
+		// TODO 删除分享
 	}
 
 	// 回收站 API
 	{
 		memberApi.GET("/recycle-bin", H(member.DefaultRecycleBinApi.List))                // 项目列表
+		memberApi.GET("/recycle-bin/:id", H(member.DefaultRecycleBinApi.Content))         // 项目内容
 		memberApi.GET("/recycle-bin/:id/entries", H(member.DefaultRecycleBinApi.Entries)) // 项目列表
 		memberApi.DELETE("/recycle-bin", H(member.DefaultRecycleBinApi.Delete))           // 删除文件
 		memberApi.POST("/recycle-bin/restore", H(member.DefaultRecycleBinApi.Restore))    // 恢复文件
