@@ -2,12 +2,15 @@ package member
 
 import (
 	"context"
+	"ispace/common"
 	"ispace/common/constant"
 	"ispace/common/page"
 	"ispace/common/response"
 	"ispace/db"
 	"ispace/web/handler/api"
 	"ispace/web/service"
+	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -64,6 +67,22 @@ func (r RecycleBinApi) Restore(g *gin.Context) (any, error) {
 		return nil, err
 	}
 	return response.Ok(nil), nil
+}
+
+// Entries 子项目
+func (r RecycleBinApi) Entries(g *gin.Context) (any, error) {
+	var memberId = g.GetInt64(constant.CtxKeySubject)
+	rId, err := strconv.ParseInt(g.Param("id"), 10, 64)
+	if err != nil {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
+	}
+	result, err := db.Transaction(g.Request.Context(), func(ctx context.Context) ([]*api.RecycleBinEntryResponse, error) {
+		return r.service.Entries(ctx, memberId, rId)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(result), nil
 }
 
 func NewRecycleBinApi(binService *service.RecycleBinService) *RecycleBinApi {

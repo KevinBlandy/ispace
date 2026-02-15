@@ -195,3 +195,14 @@ type RecycleBinRestoreRequest struct {
 	Id       types.Int64Slice `json:"id,string"` // 要恢复的记录的 ID，只能是 root 级别的账户
 	//	ParentId *int64           `json:"parentId,string"` // 要恢复到的目录 ID，如果为 0 则表示为根目录，默认为删除前的目录
 }
+
+// RecycleBinEntryResponse 项目
+type RecycleBinEntryResponse struct {
+	Id          int64              `json:"id,string"`         // ID
+	Title       string             `json:"title"`             // 资源标题
+	ContentType string             `json:"contentType"`       // 媒体类型
+	Dir         bool               `json:"dir"`               // 是否是目录
+	Size        int64              `json:"size,string"`       // 文件大小
+	Status      model.ObjectStatus `json:"status"`            // 文件状态
+	CreateTime  int64              `json:"createTime,string"` // 创建时间
+}

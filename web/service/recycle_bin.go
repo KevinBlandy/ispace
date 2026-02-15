@@ -50,6 +50,7 @@ func (s RecycleBinService) List(ctx context.Context, request *api.RecycleBinList
 		t.member_id = ?
 	AND
 		t.root = ?
+	ORDER BY t.create_time DESC
 `)
 
 	var condition = []any{true, request.MemberId, true}
@@ -305,6 +306,30 @@ func (s RecycleBinService) restore(ctx context.Context, root *model.RecycleBin, 
 		})
 	}
 	return gorm.G[*model.Resource](session).CreateInBatches(ctx, &resources, 100)
+}
+
+// Entries 项目列表
+func (s RecycleBinService) Entries(ctx context.Context, memberId int64, id int64) ([]*api.RecycleBinEntryResponse, error) {
+	return db.List[api.RecycleBinEntryResponse](ctx, `SELECT 
+		t.id,
+		t.resource_title title,
+		t.resource_content_type content_type,
+		t.resource_dir dir,
+		t.create_time,
+		t1.size,
+		t1.status
+	FROM
+		t_recycle_bin t
+		LEFT JOIN t_object t1 ON t1.id = t.resource_object_id AND t.resource_dir = ?
+	WHERE
+		t.member_id = ?
+	AND
+		t.resource_parent_id = (
+			SELECT t2.resource_id FROM t_recycle_bin t2 WHERE t2.id = ?
+		)
+	AND
+		t.root = ?
+`, true, memberId, id, false)
 }
 
 var DefaultRecycleBinService = &RecycleBinService{
