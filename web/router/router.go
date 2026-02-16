@@ -88,11 +88,12 @@ func New() http.Handler {
 		memberApi.POST("/resources/share", H(member.DefaultResourceApi().Share))              // 资源分享
 	}
 
-	// 分享 Api
+	// TODO 分享 Api
 	{
-		memberApi.GET("/share", NoContent) // 分享列表
-		// TODO 添加新的分享
-		// TODO 删除分享
+		memberApi.GET("/share/:path", NoContent)                        // 分享列表
+		memberApi.POST("/share/:shareId/password", NoContent)           // 密码校验
+		memberApi.GET("/share/:shareId/content/:resourceId", NoContent) // 文件内容
+		memberApi.GET("/share/:shareId/download", NoContent)            // 文件下载
 	}
 
 	// 回收站 API
