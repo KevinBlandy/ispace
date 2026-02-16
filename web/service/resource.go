@@ -22,12 +22,14 @@ import (
 	"ispace/store"
 	"ispace/web/handler/api"
 	"log/slog"
+	"maps"
 	"mime"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -611,24 +613,33 @@ func (s *ResourceService) Move(ctx context.Context, request *api.ResourceMoveReq
 		return err
 	}
 
-	// 按路径长度排序（短的在前，父节点一定比子节点短）
-	sort.SliceStable(resources, func(i, j int) bool {
-		return len(resources[i].Path) < len(resources[j].Path)
-	})
-
-	for i, resource := range resources {
-		if !resource.Dir {
-			continue // 忽略文件
-		}
-		for j := i + 1; j < len(resources); j++ {
-			child := resources[j]
-			if strings.HasPrefix(child.Path, resource.Path) {
-				return common.NewServiceError(http.StatusBadRequest,
-					response.Fail(response.CodeBadRequest).
-						WithMessage("嵌套的资源："+fmt.Sprintf("%s -> %s", resource.Title, child.Title)))
-			}
-		}
+	// 嵌套检查
+	nestedRes, ok := s.Nested(resources)
+	if ok {
+		// 存在嵌套
+		return common.NewServiceError(http.StatusBadRequest,
+			response.Fail(response.CodeBadRequest).
+				WithMessage("嵌套的资源："+fmt.Sprintf("%s -> %s", nestedRes[0].Title, nestedRes[1].Title)))
 	}
+
+	//// 按路径长度排序（短的在前，父节点一定比子节点短）
+	//sort.SliceStable(resources, func(i, j int) bool {
+	//	return len(resources[i].Path) < len(resources[j].Path)
+	//})
+	//
+	//for i, resource := range resources {
+	//	if !resource.Dir {
+	//		continue // 忽略文件
+	//	}
+	//	for j := i + 1; j < len(resources); j++ {
+	//		child := resources[j]
+	//		if strings.HasPrefix(child.Path, resource.Path) {
+	//			return common.NewServiceError(http.StatusBadRequest,
+	//				response.Fail(response.CodeBadRequest).
+	//					WithMessage("嵌套的资源："+fmt.Sprintf("%s -> %s", resource.Title, child.Title)))
+	//		}
+	//	}
+	//}
 
 	// 目标目录不能是源资源的子目录
 	if parentPath != "" {
@@ -1345,20 +1356,112 @@ func (s *ResourceService) moveToRecycleBin(ctx context.Context, root *model.Reso
 
 // Share 资源分享
 func (s *ResourceService) Share(ctx context.Context, request *api.ResourceShareRequest) error {
+
+	var m = make(map[*model.Resource][]*model.Resource)
+
 	for _, rId := range request.Id {
+
 		resource, entries, err := s.rootAndEntries(ctx, request.MemberId, rId)
 		if err != nil {
 			return err
 		}
-		if resource == nil {
-			// 资源已经被删除
+		if resource == nil { // 资源已被删除了
 			return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源不存在"))
 		}
-
-		// TODO 执行分享
-		_ = entries
+		m[resource] = entries
 	}
-	return nil
+	return s.share(ctx, request, m)
+}
+
+func (s *ResourceService) share(ctx context.Context, request *api.ResourceShareRequest, resourcesMap map[*model.Resource][]*model.Resource) error {
+	// 确定不能存在嵌套分享
+	nestedRes, ok := s.Nested(slices.Collect(maps.Keys(resourcesMap)))
+	if ok {
+		// 存在嵌套
+		return common.NewServiceError(http.StatusBadRequest,
+			response.Fail(response.CodeBadRequest).
+				WithMessage("嵌套的资源："+fmt.Sprintf("%s -> %s", nestedRes[0].Title, nestedRes[1].Title)))
+	}
+
+	session := db.Session(ctx)
+
+	// 保存新的分享记录
+	now := util.ContextValueDefault(ctx, constant.CtxKeyRequestTime, time.Now())
+
+	var shareId = id.Next().Int64()
+
+	share := &model.Share{
+		Id:         shareId,
+		MemberId:   request.MemberId,
+		Path:       id.PathOfId(shareId), //  Path 生成
+		Enabled:    true,                 // 默认启用状态
+		Password:   request.Password,
+		Views:      0,
+		CreateTime: now.UnixMilli(),
+		ExpireTime: 0,
+	}
+
+	//  计算过期时间
+	switch request.Expire {
+	case api.ResourceShareExpireDay:
+		share.ExpireTime = now.Add(time.Hour * 24).UnixMilli() // 日
+	case api.ResourceShareExpireWeek:
+		share.ExpireTime = now.Add(time.Hour * 24 * 7).UnixMilli() // 周
+	case api.ResourceShareExpireMonth:
+		share.ExpireTime = now.Add(time.Hour * 24 * 30).UnixMilli() // 月
+	case api.ResourceShareExpireYear:
+		share.ExpireTime = now.Add(time.Hour * 24 * 365).UnixMilli() // 年
+	case api.ResourceShareExpireForever: // 永久
+	default:
+		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法的有效时间"))
+	}
+
+	if err := gorm.G[model.Share](session).Create(ctx, share); err != nil {
+		return err
+	}
+
+	var items = make([]*model.ShareResource, 0)
+
+	for root, resources := range resourcesMap {
+		for _, item := range append(resources, root) {
+			items = append(items, &model.ShareResource{
+				Id:                  id.Next().Int64(),
+				ShareId:             share.Id,
+				Root:                util.If(item.Id == root.Id, true, false),
+				CreateTime:          now.UnixMilli(),
+				UpdateTime:          now.UnixMilli(),
+				ResourceId:          item.Id,
+				ResourceParentId:    item.ParentId,
+				ResourceObjectId:    item.ObjectId,
+				ResourcePath:        item.Path,
+				ResourceTitle:       item.Title,
+				ResourceDir:         item.Dir,
+				ResourceContentType: item.ContentType,
+				ResourceDepth:       item.Depth,
+			})
+		}
+	}
+	return gorm.G[*model.ShareResource](session).CreateInBatches(ctx, &items, 100)
+}
+
+// Nested 根据 Path/Depth/Dir 检查是否存在嵌套资源
+func (s *ResourceService) Nested(resources []*model.Resource) ([]*model.Resource, bool) {
+	sort.SliceStable(resources, func(i, j int) bool {
+		//return len(resources[i].Path) < len(resources[j].Path) 	// 按路径长度排序（短的在前，父节点一定比子节点短）
+		return resources[i].Depth < resources[j].Depth // 按照深度排序，父节点一定比子节点小
+	})
+	for i, resource := range resources {
+		if !resource.Dir {
+			continue // 忽略文件
+		}
+		for j := i + 1; j < len(resources); j++ {
+			child := resources[j]
+			if strings.HasPrefix(child.Path, resource.Path) {
+				return []*model.Resource{resource, child}, true
+			}
+		}
+	}
+	return nil, false
 }
 
 var DefaultResourceService = NewResourceService(DefaultObjectService,

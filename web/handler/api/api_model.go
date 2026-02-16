@@ -207,8 +207,21 @@ type RecycleBinEntryResponse struct {
 	CreateTime  int64              `json:"createTime,string"` // 创建时间
 }
 
+// ResourceShareExpire 分享资源的过期时间
+type ResourceShareExpire string
+
+var (
+	ResourceShareExpireDay     = ResourceShareExpire("day")     // 1天过期
+	ResourceShareExpireWeek    = ResourceShareExpire("week")    // 一周过期
+	ResourceShareExpireMonth   = ResourceShareExpire("month")   // 一个月过期
+	ResourceShareExpireYear    = ResourceShareExpire("year")    // 一年过期
+	ResourceShareExpireForever = ResourceShareExpire("forever") // 永远不过期
+)
+
 // ResourceShareRequest 资源分享请求
 type ResourceShareRequest struct {
-	MemberId int64            `json:"-"`         // 会员 ID
-	Id       types.Int64Slice `json:"id,string"` // 要分享的资源 ID 列表
+	MemberId int64               `json:"-"`         // 会员 ID
+	Id       types.Int64Slice    `json:"id,string"` // 要分享的资源 ID 列表
+	Password string              `json:"password"`  // 访问密码
+	Expire   ResourceShareExpire `json:"expire"`    // 过期时间
 }

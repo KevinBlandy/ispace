@@ -135,7 +135,7 @@ func (s *Store) ServeArchiveFile(w http.ResponseWriter, r *http.Request, path, f
 }
 
 // archiveTree 读取 zip 文件并将其转换为树形结构
-// gen by Gemini
+// Gen By Gemini
 func (s *Store) archiveTree(z *zip.Reader) []*ArchiveTree {
 
 	var rootEntries []*ArchiveTree
