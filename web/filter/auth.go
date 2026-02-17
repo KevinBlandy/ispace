@@ -28,6 +28,11 @@ func NewAuthFilter(cookie, header string, ss *service.SessionService) *AuthFilte
 
 func (a *AuthFilter) Serve(c *gin.Context) (any, error) {
 
+	// 已经登陆了
+	if _, ok := c.Get(constant.CtxKeySubject); ok {
+		return nil, nil
+	}
+
 	token, _ := c.Cookie(a.cookie)
 	if token == "" {
 		token = c.GetHeader(a.header)

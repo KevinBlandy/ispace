@@ -225,3 +225,11 @@ type ResourceShareRequest struct {
 	Password string              `json:"password"`  // 访问密码
 	Expire   ResourceShareExpire `json:"expire"`    // 过期时间
 }
+
+// ResourceShareResponse 资源分享响应
+type ResourceShareResponse struct {
+	Id         int64  `json:"id,string"`         // 分享 ID
+	ExpireTime int64  `json:"expireTime,string"` // 过期时间，如果为 0 则表示永久
+	Path       string `json:"path"`              // 唯一的 URL Path
+	Password   string `json:"password"`          // 设置的密码
+}

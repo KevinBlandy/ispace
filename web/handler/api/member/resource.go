@@ -562,13 +562,13 @@ func (r ResourceApi) Share(g *gin.Context) (any, error) {
 	if err := g.ShouldBindJSON(request); err != nil {
 		return nil, err
 	}
-	err := db.TransactionWithOutResult(g.Request.Context(), func(ctx context.Context) error {
+	result, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (any, error) {
 		return service.DefaultResourceService.Share(ctx, request)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return response.Ok(request.MemberId), nil
+	return response.Ok(result), nil
 }
 
 var DefaultResourceApi = sync.OnceValue(func() *ResourceApi {

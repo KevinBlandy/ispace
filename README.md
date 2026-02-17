@@ -15,6 +15,8 @@
   * 文档(day/week/month/year)
   * 音频(day/week/month/year)
   * 我的分享
+    * 访问次数 
+    * 取消（删除）/禁用
 * 个人设置
   * 账户设置
 

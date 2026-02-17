@@ -1355,7 +1355,7 @@ func (s *ResourceService) moveToRecycleBin(ctx context.Context, root *model.Reso
 }
 
 // Share 资源分享
-func (s *ResourceService) Share(ctx context.Context, request *api.ResourceShareRequest) error {
+func (s *ResourceService) Share(ctx context.Context, request *api.ResourceShareRequest) (*api.ResourceShareResponse, error) {
 
 	var m = make(map[*model.Resource][]*model.Resource)
 
@@ -1363,22 +1363,22 @@ func (s *ResourceService) Share(ctx context.Context, request *api.ResourceShareR
 
 		resource, entries, err := s.rootAndEntries(ctx, request.MemberId, rId)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if resource == nil { // 资源已被删除了
-			return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源不存在"))
+			return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源不存在"))
 		}
 		m[resource] = entries
 	}
 	return s.share(ctx, request, m)
 }
 
-func (s *ResourceService) share(ctx context.Context, request *api.ResourceShareRequest, resourcesMap map[*model.Resource][]*model.Resource) error {
+func (s *ResourceService) share(ctx context.Context, request *api.ResourceShareRequest, resourcesMap map[*model.Resource][]*model.Resource) (*api.ResourceShareResponse, error) {
 	// 确定不能存在嵌套分享
 	nestedRes, ok := s.Nested(slices.Collect(maps.Keys(resourcesMap)))
 	if ok {
 		// 存在嵌套
-		return common.NewServiceError(http.StatusBadRequest,
+		return nil, common.NewServiceError(http.StatusBadRequest,
 			response.Fail(response.CodeBadRequest).
 				WithMessage("嵌套的资源："+fmt.Sprintf("%s -> %s", nestedRes[0].Title, nestedRes[1].Title)))
 	}
@@ -1412,12 +1412,21 @@ func (s *ResourceService) share(ctx context.Context, request *api.ResourceShareR
 	case api.ResourceShareExpireYear:
 		share.ExpireTime = now.Add(time.Hour * 24 * 365).UnixMilli() // 年
 	case api.ResourceShareExpireForever: // 永久
+		share.ExpireTime = 0
 	default:
-		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法的有效时间"))
+		// TODO 解析客户端传递过来的自定义的时间
+		//expireTimestamp, err := strconv.ParseInt(string(request.Expire), 10, 64)
+		//if err == nil {
+		//	expireTime := time.UnixMilli(expireTimestamp)
+		//	if expireTime.After(now) {
+		//		share.ExpireTime = expireTime.UnixMilli()
+		//	}
+		//}
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法的有效时间"))
 	}
 
 	if err := gorm.G[model.Share](session).Create(ctx, share); err != nil {
-		return err
+		return nil, err
 	}
 
 	var items = make([]*model.ShareResource, 0)
@@ -1441,7 +1450,12 @@ func (s *ResourceService) share(ctx context.Context, request *api.ResourceShareR
 			})
 		}
 	}
-	return gorm.G[*model.ShareResource](session).CreateInBatches(ctx, &items, 100)
+	return &api.ResourceShareResponse{
+		Id:         shareId,
+		ExpireTime: share.ExpireTime,
+		Path:       share.Path,
+		Password:   share.Password,
+	}, gorm.G[*model.ShareResource](session).CreateInBatches(ctx, &items, 100)
 }
 
 // Nested 根据 Path/Depth/Dir 检查是否存在嵌套资源

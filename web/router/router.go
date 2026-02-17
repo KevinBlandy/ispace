@@ -21,6 +21,12 @@ var NoContent = func(context *gin.Context) {
 	context.AbortWithStatus(http.StatusNoContent)
 }
 
+var MockAuthFilter = func(id int64) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		context.Set(constant.CtxKeySubject, id)
+	}
+}
+
 func New() http.Handler {
 
 	router := gin.New()
@@ -61,10 +67,8 @@ func New() http.Handler {
 	)
 
 	memberApi.Use(
-		func(context *gin.Context) {
-			context.Set(constant.CtxKeySubject, int64(10000))
-		},
-		//H(filter.DefaultMemberAuthFilter().Serve), // 认证
+		MockAuthFilter(int64(10000)),
+		H(filter.DefaultMemberAuthFilter().Serve), // 认证
 	)
 
 	// 文件 API 接口
@@ -86,14 +90,7 @@ func New() http.Handler {
 		memberApi.GET("/resources/recent", H(member.DefaultResourceApi().Recent))             // 最近上传
 		memberApi.GET("/resources/group", H(member.DefaultResourceApi().Group))               // 资源分组
 		memberApi.POST("/resources/share", H(member.DefaultResourceApi().Share))              // 资源分享
-	}
 
-	// TODO 分享 Api
-	{
-		memberApi.GET("/share/:path", NoContent)                        // 分享列表
-		memberApi.POST("/share/:shareId/password", NoContent)           // 密码校验
-		memberApi.GET("/share/:shareId/content/:resourceId", NoContent) // 文件内容
-		memberApi.GET("/share/:shareId/download", NoContent)            // 文件下载
 	}
 
 	// 回收站 API
@@ -115,6 +112,27 @@ func New() http.Handler {
 		memberApi.GET("/profile", H(member.DefaultProfileApi.Profile))                         // 查询个人信息
 		memberApi.PATCH("/profile", H(member.DefaultProfileApi.Update))                        // 更新个人信息
 		memberApi.POST("/account/password", H(member.DefaultAccountSettingApi.UpdatePassword)) // 修改账户的密码
+	}
+
+	// ======================================================================
+	// 文件分享 API 接口
+	// ======================================================================
+	shareApi := router.Group("/api")
+
+	{
+		shareApi.GET("/share",
+			MockAuthFilter(int64(10000)),
+			H(filter.DefaultMemberAuthFilter().Serve), // 认证
+			NoContent) // 分享列表
+
+		shareApi.PATCH("/share/:id", NoContent)  // 编辑资源
+		shareApi.DELETE("/share/:id", NoContent) // 删除资源
+
+		shareApi.GET("/share/:path", NoContent)                                // 资源列表
+		shareApi.POST("/share/:path/verify", NoContent)                        // 密码校验
+		shareApi.GET("/share/:path/resource/:resourceId", NoContent)           // 读取文件内容
+		shareApi.GET("/share/:path/resource/download", NoContent)              // 文件下载
+		shareApi.GET("/share/:path/resource/:resourceId/unarchive", NoContent) // 解压文件
 	}
 
 	// ======================================================================
