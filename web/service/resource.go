@@ -1398,6 +1398,7 @@ func (s *ResourceService) share(ctx context.Context, request *api.ResourceShareR
 		Password:   request.Password,
 		Views:      0,
 		CreateTime: now.UnixMilli(),
+		UpdateTime: now.UnixMilli(),
 		ExpireTime: 0,
 	}
 
@@ -1437,8 +1438,6 @@ func (s *ResourceService) share(ctx context.Context, request *api.ResourceShareR
 				Id:                  id.Next().Int64(),
 				ShareId:             share.Id,
 				Root:                util.If(item.Id == root.Id, true, false),
-				CreateTime:          now.UnixMilli(),
-				UpdateTime:          now.UnixMilli(),
 				ResourceId:          item.Id,
 				ResourceParentId:    item.ParentId,
 				ResourceObjectId:    item.ObjectId,

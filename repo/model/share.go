@@ -9,6 +9,7 @@ type Share struct {
 	Password   string // 访问密码
 	Views      int64  // 访问次数，每次打开算一次
 	CreateTime int64  // 分享日期
+	UpdateTime int64  // 更新日期
 	ExpireTime int64  // 分享过期时间，0 表示永不过期
 }
 
@@ -19,11 +20,9 @@ func (Share) TableName() string {
 // ShareResource 分享的资源详情
 // 直接复制完整的资源树
 type ShareResource struct {
-	Id         int64 `gorm:"primaryKey"` // 记录 ID
-	ShareId    int64 `gorm:"index"`      // 分享 ID
-	Root       bool  // 是否是根路径
-	CreateTime int64 // 创建时间
-	UpdateTime int64 // 更新时间
+	Id      int64 `gorm:"primaryKey"` // 记录 ID
+	ShareId int64 `gorm:"index"`      // 分享 ID
+	Root    bool  // 是否是根路径
 
 	// 资源快照
 	ResourceId          int64  `gorm:"index"` // 资源 ID
