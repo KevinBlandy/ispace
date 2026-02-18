@@ -11,6 +11,7 @@ import (
 	"ispace/web/handler"
 	"ispace/web/handler/api/manager"
 	"ispace/web/handler/api/member"
+	"ispace/web/service"
 	"net/http"
 	"os"
 
@@ -58,6 +59,8 @@ func New() http.Handler {
 	// Member Api 接口
 	// ======================================================================
 
+	memberAuthFilter := H(filter.NewMemberAuthFilter(true).Serve)
+
 	memberApi := router.Group("/api")
 
 	// 登录
@@ -68,7 +71,7 @@ func New() http.Handler {
 
 	memberApi.Use(
 		MockAuthFilter(int64(10000)),
-		H(filter.DefaultMemberAuthFilter().Serve), // 认证
+		memberAuthFilter, // 认证
 	)
 
 	// 文件 API 接口
@@ -120,19 +123,22 @@ func New() http.Handler {
 	shareApi := router.Group("/api")
 
 	{
-		shareApi.GET("/share",
-			MockAuthFilter(int64(10000)),
-			H(filter.DefaultMemberAuthFilter().Serve), // 认证
-			NoContent) // 分享列表
+		shareApi.GET("/share", MockAuthFilter(int64(10000)), memberAuthFilter, H(member.DefaultShareApi.List))         // 分享列表
+		shareApi.PATCH("/share/:id", MockAuthFilter(int64(10000)), memberAuthFilter, H(member.DefaultShareApi.Update)) // 编辑资源
+		shareApi.DELETE("/share", MockAuthFilter(int64(10000)), memberAuthFilter, H(member.DefaultShareApi.Delete))    // 删除资源
 
-		shareApi.PATCH("/share/:id", NoContent)  // 编辑资源
-		shareApi.DELETE("/share/:id", NoContent) // 删除资源
+		// 资源访问，可选的会员认证
+		optionalMemberAuthFilter := H(filter.NewMemberAuthFilter(true).Serve)
 
-		shareApi.GET("/share/:path", NoContent)                                // 资源列表
-		shareApi.POST("/share/:path/verify", NoContent)                        // 密码校验
-		shareApi.GET("/share/:path/resource/:resourceId", NoContent)           // 读取文件内容
-		shareApi.GET("/share/:path/resource/download", NoContent)              // 文件下载
-		shareApi.GET("/share/:path/resource/:resourceId/unarchive", NoContent) // 解压文件
+		// 资源访问，口令验证
+		shareAuthFilter := H(filter.NewShareAuthFilter("path", constant.HttpCookieShareToken, service.DefaultShareService).Serve)
+
+		shareApi.GET("/share/:path", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.Share))                  // 资源信息
+		shareApi.POST("/share/:path/verify", NoContent)                                                                           // 密码校验
+		shareApi.GET("/share/:path/resources", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.ResourceList)) // 资源列表
+		shareApi.GET("/share/:path/resources/:resourceId", optionalMemberAuthFilter, shareAuthFilter, NoContent)                  // 读取文件内容
+		shareApi.GET("/share/:path/resources/download", optionalMemberAuthFilter, shareAuthFilter, NoContent)                     // 文件下载
+		shareApi.GET("/share/:path/resources/:resourceId/unarchive", optionalMemberAuthFilter, shareAuthFilter, NoContent)        // 解压文件
 	}
 
 	// ======================================================================

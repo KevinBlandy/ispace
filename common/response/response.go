@@ -62,6 +62,8 @@ var (
 	CodeNotFound Code = "NOT_FOUND"
 	// CodeCaptchaFailed 验证码错误
 	CodeCaptchaFailed Code = "CAPTCHA_FAILED"
+	// CodeSharePasswordFailed 口令错误
+	CodeSharePasswordFailed Code = "SHARE_PASSWORD_FAILED"
 	// CodeUnauthorized 未登录
 	CodeUnauthorized Code = "UNAUTHORIZED"
 	// CodeForbidden 无权操作

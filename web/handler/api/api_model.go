@@ -233,3 +233,66 @@ type ResourceShareResponse struct {
 	Path       string `json:"path"`              // 唯一的 URL Path
 	Password   string `json:"password"`          // 设置的密码
 }
+
+// ShareListRequest 分享的资源
+type ShareListRequest struct {
+	Pager    *page.Pager // 分页
+	MemberId int64       // 会员 ID
+	Title    string      // 分享文件的标题
+}
+
+// ShareListResponse 资源列表响应
+type ShareListResponse struct {
+	Id         int64  `json:"id,string"`
+	Path       string `json:"path"`
+	Enabled    bool   `json:"enabled"`
+	Password   string `json:"password"`
+	Views      int64  `json:"views"`
+	CreateTime int64  `json:"createTime,string"`
+	ExpireTime int64  `json:"expireTime,string"`
+	Title      string `json:"title"`
+}
+
+// ShareUpdateRequest 分享更新请求
+type ShareUpdateRequest struct {
+	MemberId int64  `json:"-"`
+	Id       int64  `json:"-"`        // 记录 ID
+	Enabled  *bool  `json:"enabled"`  // 是否启用
+	Password string `json:"password"` // 密码
+}
+
+// ShareDeleteRequest 删除分享
+type ShareDeleteRequest struct {
+	MemberId int64            `json:"-"`
+	Id       types.Int64Slice `json:"id,string"`
+}
+
+// ShareResourceListRequest 资源列表请求
+type ShareResourceListRequest struct {
+	Identifier types.Identifier // ID
+	ParentId   int64            // 父级资源 ID
+	Title      string           // 标题
+}
+
+// ShareResourceListResponse 资源列表响应
+type ShareResourceListResponse struct {
+	Id          int64              `json:"id,string"`         // ID
+	Title       string             `json:"title"`             // 资源标题
+	ContentType string             `json:"contentType"`       // 类型
+	Dir         bool               `json:"dir"`               // 是否是目录
+	Size        int64              `json:"size,string"`       // 文件大小
+	Status      model.ObjectStatus `json:"status"`            // 文件状态
+	CreateTime  int64              `json:"createTime,string"` // 创建时间
+}
+
+// ShareResponse 资源分享信息
+type ShareResponse struct {
+	Id     int64  `json:"id,string"` // 唯一 id
+	Path   string `json:"path"`      // 唯一path
+	Member struct {
+		Id       int64  `json:"id,string"` // 会员 Id
+		NickName string `json:"nickName"`  // 会员昵称
+		Avatar   string `json:"avatar"`    // 头像
+	} `json:"member"`
+	CreateTime int64 `json:"createTime,string"` // 分享时间
+}

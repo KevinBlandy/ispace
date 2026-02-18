@@ -13,7 +13,9 @@ var (
 	HttpHeaderTimeZone = "X-Time-Zone"
 
 	// HttpCookieMemberToken Cookie Token
-	HttpCookieMemberToken = "memberToken"
+	HttpCookieMemberToken = "MEMBER_TOKEN"
 	// HttpCookieManagerToken Manager Token
-	HttpCookieManagerToken = "managerToken"
+	HttpCookieManagerToken = "MANAGER_TOKEN"
+	// HttpCookieShareToken 资源分享 Token
+	HttpCookieShareToken = "SHARE_TOKEN"
 )

@@ -6,7 +6,6 @@ import (
 	"ispace/common/concurrent"
 	"ispace/db"
 	"ispace/repo/model"
-	"log/slog"
 
 	"gorm.io/gorm"
 )
@@ -24,8 +23,9 @@ func (s *SysConfigService) Get(ctx context.Context, key model.SysConfigKey) *mod
 			return gorm.G[*model.SysConfig](db.Session(ctx)).Where("key = ?", key).Take(ctx)
 		}, db.TxReadOnly)
 		if err != nil {
-			slog.ErrorContext(ctx, "查询全局配置异常", slog.String("err", err.Error()))
-			return nil
+			//slog.ErrorContext(ctx, "查询全局配置异常", slog.String("err", err.Error()))
+			//return nil
+			panic(err.Error())
 		}
 		s.cache.Store(key, config)
 	}
