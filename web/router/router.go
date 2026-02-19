@@ -76,6 +76,9 @@ func New() http.Handler {
 
 	// 文件 API 接口
 	{
+		// 总文件数量/总资源大小/
+		// 上传统计[日/上传数量]
+		memberApi.GET("/resources/stat", NoContent)                                           // TODO 资源统计
 		memberApi.GET("/resources/tree", H(member.DefaultResourceApi().Tree))                 // 完整的文件树
 		memberApi.GET("/resources", H(member.DefaultResourceApi().List))                      // 资源列表
 		memberApi.GET("/resources/:id", H(member.DefaultResourceApi().Content))               // 读取资源
@@ -172,6 +175,7 @@ func New() http.Handler {
 
 	// 资源管理
 	{
+		managerApi.GET("/objects/stat", NoContent)                           // TODO 资源统计
 		managerApi.GET("/objects", H(manager.DefaultObjectApi.List))         // 资源列表
 		managerApi.PATCH("/objects/:id", H(manager.DefaultObjectApi.Update)) // 更新资源
 		managerApi.DELETE("/objects", H(manager.DefaultObjectApi.Delete))    // 删除资源
