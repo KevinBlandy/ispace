@@ -47,7 +47,6 @@ func (s *SignInApi) Serve(ctx *gin.Context) (any, error) {
 		Value:    signed,
 		Path:     "/",
 		MaxAge:   int((time.Hour * 24 * 365).Seconds()),
-		Secure:   false,
 		HttpOnly: true,
 		SameSite: http.SameSiteDefaultMode,
 	})

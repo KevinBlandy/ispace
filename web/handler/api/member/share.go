@@ -2,6 +2,10 @@ package member
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"errors"
 	"ispace/common"
 	"ispace/common/constant"
 	"ispace/common/page"
@@ -9,10 +13,15 @@ import (
 	"ispace/common/types"
 	"ispace/db"
 	"ispace/repo/model"
+	"ispace/store"
 	"ispace/web/handler/api"
 	"ispace/web/service"
+	"maps"
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -112,6 +121,190 @@ func (a ShareApi) Share(g *gin.Context) (any, error) {
 		return nil, err
 	}
 	return response.Ok(ret), nil
+}
+
+// Verify 分享口令验证
+func (a ShareApi) Verify(g *gin.Context) (any, error) {
+	var request = new(api.SharePasswordVerifyRequest)
+	if err := g.ShouldBindJSON(&request); err != nil {
+		return nil, err
+	}
+	request.Identifier = types.Identifier(g.Param("path"))
+
+	share, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*model.Share, error) {
+		return a.service.GetByIdentifier(ctx, request.Identifier, "id", "password", "path")
+	}, db.TxReadOnly)
+	if err != nil {
+		return nil, err
+	}
+	if share.Password == "" {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("该资源无需密码"))
+	}
+
+	// Token 有效期 24H
+	expireTime := strconv.FormatInt(time.Now().Add(time.Hour*24).UnixMilli(), 10)
+
+	// 签发密钥
+	//  sign = shah256(path, timestamp, password)
+	hasher := sha256.New()
+	hasher.Write([]byte(share.Path))
+	hasher.Write([]byte(expireTime))
+	hasher.Write([]byte(share.Password))
+
+	sign := hex.EncodeToString(hasher.Sum(nil))
+
+	g.SetCookieData(&http.Cookie{
+		Name:     constant.HttpCookieShareToken,
+		Value:    strings.Join([]string{sign, expireTime}, "-"), //  "sign-timestamp"
+		Path:     "/",
+		MaxAge:   60 * 60 * 24 * 30, // Cookie 存放一个月
+		HttpOnly: true,
+		SameSite: http.SameSiteDefaultMode,
+	})
+
+	return response.Ok(nil), nil
+}
+
+// Content 读取文件内容
+func (a ShareApi) Content(g *gin.Context) (any, error) {
+
+	identifier := types.Identifier(g.Param("path"))
+	resourceId, _ := strconv.ParseInt(g.Param("resourceId"), 10, 64)
+	if resourceId < 1 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
+	}
+
+	// 检索资源
+	resource, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (struct {
+		Id          int64
+		Title       string
+		Compression model.ObjectCompression
+		ContentType string
+		Status      model.ObjectStatus
+		Path        string
+	}, error) {
+		return a.service.GetResource(ctx, identifier, resourceId)
+	}, db.TxReadOnly)
+
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+
+	if resource.Id < 1 {
+		return nil, common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("资源不存在"))
+	}
+
+	if resource.Status == model.ObjectStatusDisabled {
+		return nil, common.NewServiceError(http.StatusForbidden, response.Fail(response.CodeForbidden).WithMessage("资源被屏蔽"))
+	}
+
+	err = store.DefaultStore().ServeContent(g.Writer, g.Request, &store.File{
+		Title:       resource.Title,
+		Compression: resource.Compression,
+		ContentType: resource.ContentType,
+		Path:        resource.Path,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	g.Abort()
+
+	return nil, nil
+}
+
+// Download 文件下载
+func (a ShareApi) Download(g *gin.Context) (any, error) {
+
+	// 要下载的资源 ID
+	var idMap = make(map[int64]struct{})
+	for _, v := range g.QueryArray("resourceId") {
+		resourceId, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || resourceId < 1 {
+			return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
+		}
+		idMap[resourceId] = struct{}{}
+	}
+
+	// 参数封装
+	var request = new(api.ShareResourceDownloadRequest)
+	request.Id = slices.Collect(maps.Keys(idMap))
+	request.Identifier = types.Identifier(g.Param("path"))
+
+	if len(request.Id) == 0 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("下载资源不能为空"))
+	}
+
+	// 检索资源树
+	tree, err := db.Transaction(g.Request.Context(), func(ctx context.Context) ([]*store.DownloadTree, error) {
+		return a.service.Download(ctx, request)
+	}, db.TxReadOnly)
+
+	if err != nil {
+		return nil, err
+	}
+	if err := store.DefaultStore().Downloads(g.Writer, tree...); err != nil {
+		return nil, err
+	}
+	g.Abort()
+	return nil, nil
+}
+
+// Unarchive 解压文件
+func (a ShareApi) Unarchive(g *gin.Context) (any, error) {
+
+	// 请求参数
+	identifier := types.Identifier(g.Param("path"))
+	resourceId, _ := strconv.ParseInt(g.Param("resourceId"), 10, 64)
+	if resourceId < 1 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
+	}
+
+	// 检索资源
+	resource, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (struct {
+		Id          int64
+		Title       string
+		Compression model.ObjectCompression
+		ContentType string
+		Status      model.ObjectStatus
+		Path        string
+	}, error) {
+		return a.service.GetResource(ctx, identifier, resourceId)
+	}, db.TxReadOnly)
+
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+
+	if resource.Id < 1 {
+		return nil, common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("资源不存在"))
+	}
+
+	if resource.Status == model.ObjectStatusDisabled {
+		return nil, common.NewServiceError(http.StatusForbidden, response.Fail(response.CodeForbidden).WithMessage("资源被屏蔽"))
+	}
+
+	// 文件类型判断
+	// 必须是 zip 文件
+	if !strings.HasPrefix(resource.ContentType, "application/zip") {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("不支持的压缩格式"))
+	}
+
+	file := strings.TrimSpace(g.Query("file"))
+
+	// 返回树结构
+	if file == "" {
+		ret, err := store.DefaultStore().ArchiveTree(resource.Path)
+		if err != nil {
+			return nil, err
+		}
+		return response.Ok(ret), nil
+	}
+
+	// 读取文件
+	g.Abort()
+
+	return nil, store.DefaultStore().ServeArchiveFile(g.Writer, g.Request, resource.Path, file)
 }
 
 func NewShareApi(service *service.ShareService) *ShareApi {

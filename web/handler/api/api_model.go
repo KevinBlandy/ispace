@@ -296,3 +296,15 @@ type ShareResponse struct {
 	} `json:"member"`
 	CreateTime int64 `json:"createTime,string"` // 分享时间
 }
+
+// SharePasswordVerifyRequest 资源密码验证
+type SharePasswordVerifyRequest struct {
+	Identifier types.Identifier `json:"-"`
+	Password   string           `json:"password"`
+}
+
+// ShareResourceDownloadRequest 资源下载
+type ShareResourceDownloadRequest struct {
+	Identifier types.Identifier `json:"-"`
+	Id         []int64          `json:"id,string"` // 要下载的记录 ID
+}

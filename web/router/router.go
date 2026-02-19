@@ -131,14 +131,18 @@ func New() http.Handler {
 		optionalMemberAuthFilter := H(filter.NewMemberAuthFilter(true).Serve)
 
 		// 资源访问，口令验证
-		shareAuthFilter := H(filter.NewShareAuthFilter("path", constant.HttpCookieShareToken, service.DefaultShareService).Serve)
+		shareAuthFilter := H(filter.NewShareAuthFilter(
+			"path",
+			constant.HttpCookieShareToken,
+			service.DefaultShareService,
+		).Serve)
 
-		shareApi.GET("/share/:path", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.Share))                  // 资源信息
-		shareApi.POST("/share/:path/verify", NoContent)                                                                           // 密码校验
-		shareApi.GET("/share/:path/resources", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.ResourceList)) // 资源列表
-		shareApi.GET("/share/:path/resources/:resourceId", optionalMemberAuthFilter, shareAuthFilter, NoContent)                  // 读取文件内容
-		shareApi.GET("/share/:path/resources/download", optionalMemberAuthFilter, shareAuthFilter, NoContent)                     // 文件下载
-		shareApi.GET("/share/:path/resources/:resourceId/unarchive", optionalMemberAuthFilter, shareAuthFilter, NoContent)        // 解压文件
+		shareApi.GET("/share/:path", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.Share))                                     // 资源信息
+		shareApi.POST("/share/:path/verify", H(member.DefaultShareApi.Verify))                                                                       // 密码校验
+		shareApi.GET("/share/:path/resources", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.ResourceList))                    // 资源列表
+		shareApi.GET("/share/:path/resources/:resourceId", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.Content))             // 读取文件内容
+		shareApi.GET("/share/:path/resources/download", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.Download))               // 文件下载
+		shareApi.GET("/share/:path/resources/:resourceId/unarchive", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.Unarchive)) // 解压文件
 	}
 
 	// ======================================================================

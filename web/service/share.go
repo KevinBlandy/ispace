@@ -10,9 +10,12 @@ import (
 	"ispace/common/util"
 	"ispace/db"
 	"ispace/repo/model"
+	"ispace/store"
 	"ispace/web/handler/api"
+	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 
 	"gorm.io/gorm"
 )
@@ -200,6 +203,209 @@ func (s ShareService) Share(ctx context.Context, identifier types.Identifier) (*
 		}{member.Id, member.NickName, member.Avatar},
 		CreateTime: share.CreateTime,
 	}, nil
+}
+
+// GetResource 检索资源
+func (s ShareService) GetResource(ctx context.Context, identifier types.Identifier, shareResourceId int64) (ret struct {
+	Id          int64
+	Title       string
+	Compression model.ObjectCompression
+	ContentType string
+	Status      model.ObjectStatus
+	Path        string
+}, err error) {
+
+	query := &strings.Builder{}
+	query.WriteString(`
+		SELECT
+			t1.id,
+			t1.resource_title title,
+			t2.compression,
+			t1.resource_content_type contentType,
+			t2.status,
+			t2.path
+		FROM
+			t_share t
+			INNER JOIN t_share_resource t1 ON t1.share_id = t.id
+			INNER JOIN t_object t2 ON t2.id = t1.resource_object_id
+		WHERE`,
+	)
+
+	params := make([]any, 0)
+
+	if identifier.Numeric() {
+		query.WriteString(" t.id = ?")
+		params = append(params, identifier.Int64())
+	} else {
+		query.WriteString(" t.path = ?")
+		params = append(params, identifier.String())
+	}
+
+	query.WriteString(` AND t1.id = ? AND t1.resource_dir = ?`)
+	params = append(params, shareResourceId, false)
+
+	err = db.Session(ctx).Raw(query.String(), params...).Row().Scan(
+		&ret.Id,
+		&ret.Title,
+		&ret.Compression,
+		&ret.ContentType,
+		&ret.Status,
+		&ret.Path,
+	)
+	return
+}
+
+// Download 资源下载树
+func (s ShareService) Download(ctx context.Context, request *api.ShareResourceDownloadRequest) ([]*store.DownloadTree, error) {
+
+	session := db.Session(ctx)
+
+	var shareId int64
+
+	// 统一根据 id 进行检索
+	if request.Identifier.Numeric() {
+		shareId = request.Identifier.Int64()
+	} else {
+		share, err := s.GetByIdentifier(ctx, request.Identifier, "id")
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		shareId = share.Id
+	}
+
+	if shareId < 1 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源不存在"))
+	}
+
+	// 检索资源列表
+	rows, err := session.Raw(`
+			SELECT
+				t1.resource_id id,
+				t1.resource_parent_id parent_id,
+				t1.resource_title title,
+				t1.resource_dir dir,
+				ifnull(t2.path, '') path,
+				ifnull(t2.compression, '') compression
+			FROM
+				t_share t
+				INNER JOIN t_share_resource t1 ON t1.share_id = t.id
+				LEFT JOIN t_object t2 ON t2.id = t1.resource_object_id AND t1.resource_dir = ?
+			WHERE
+				t.id = ?
+			AND
+				t1.id IN ?`, false, shareId, request.Id).Rows()
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer util.SafeClose(rows)
+
+	resources := make([]*store.DownloadTree, 0)
+
+	for rows.Next() {
+		resource := new(store.DownloadTree)
+		if err := rows.Scan(&resource.Id, &resource.ParentId, &resource.Title, &resource.Dir, &resource.Path, &resource.Compression); err != nil {
+			return nil, err
+		}
+		resources = append(resources, resource)
+	}
+
+	// 构建完整的订单树
+	var subTree = func(r *store.DownloadTree) error {
+		// 检索树下的所有记录
+		rows, err := session.Raw(`
+			SELECT
+				t1.resource_id id,
+				t1.resource_parent_id parent_id,
+				t1.resource_title title,
+				t1.resource_dir dir,
+				ifnull(t2.path, '') path,
+				ifnull(t2.compression, '') compression
+			FROM
+				t_share t
+				INNER JOIN t_share_resource t1 ON t1.share_id = t.id
+				LEFT JOIN t_object t2 ON t2.id = t1.resource_object_id AND t1.resource_dir = ?
+			WHERE
+				t.id = ?
+			AND
+				t1.resource_path LIKE CONCAT(
+					(SELECT resource_path FROM t_share_resource WHERE id = ?),
+					'%'
+				)
+			AND
+				t1.id <> ?
+		`, false, shareId, r.Id, r.Id).Rows()
+
+		if err != nil {
+			return err
+		}
+
+		defer util.SafeClose(rows)
+
+		// Map 结构存储
+		var resourceMap = make(map[int64]*store.DownloadTree)
+		for rows.Next() {
+			resource := new(store.DownloadTree)
+			if err := rows.Scan(&resource.Id, &resource.ParentId, &resource.Title, &resource.Dir, &resource.Path, &resource.Compression); err != nil {
+				return err
+			}
+			resourceMap[resource.Id] = resource
+		}
+
+		if len(resourceMap) == 0 {
+			return nil
+		}
+
+		// 顶级记录
+		for _, resource := range resourceMap {
+			if resource.ParentId == r.Id {
+				r.Entries = append(r.Entries, resource)
+				delete(resourceMap, resource.Id)
+			}
+		}
+
+		var subEntry func(*store.DownloadTree, map[int64]*store.DownloadTree)
+
+		subEntry = func(r *store.DownloadTree, m map[int64]*store.DownloadTree) {
+			r.Entries = make([]*store.DownloadTree, 0)
+			for _, resource := range m {
+				if resource.ParentId == r.Id {
+					r.Entries = append(r.Entries, resource)
+					delete(m, resource.Id)
+				}
+			}
+			if len(r.Entries) > 0 {
+				for _, resource := range r.Entries {
+					subEntry(resource, m)
+				}
+			}
+		}
+
+		// 递归构建所有的子记录
+		for _, entry := range r.Entries {
+			subEntry(entry, resourceMap)
+		}
+
+		return nil
+	}
+
+	waitGroup := new(sync.WaitGroup)
+
+	for _, resource := range resources {
+		// 目录的话，构建完整的文件树
+		if resource.Dir {
+			waitGroup.Go(func() {
+				if err := subTree(resource); err != nil {
+					slog.ErrorContext(ctx, "检索资源树异常", slog.String("err", err.Error()))
+				}
+			})
+		}
+	}
+
+	waitGroup.Wait()
+
+	return resources, nil
 }
 
 func NewShareService() *ShareService {
