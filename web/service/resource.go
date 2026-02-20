@@ -506,78 +506,78 @@ func (s *ResourceService) Rename(ctx context.Context, request *api.ResourceRenam
 	return nil
 }
 
-// Delete 物理删除资源
-func (s *ResourceService) Delete(ctx context.Context, request *api.ResourceDeleteRequest) error {
-
-	session := db.Session(ctx)
-
-	// 查询要删除的资源
-	for _, resourceId := range request.Id {
-		resource, err := gorm.G[*model.Resource](session).
-			Select("id", "path", "object_id", "dir").
-			Where("id = ? AND member_id = ?", resourceId, request.MemberId).Take(ctx)
-
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			continue
-		}
-
-		if resource.Dir {
-			err := func() error {
-				// 删除的是目录，查询所有子级资源，包括自己
-				rows, err := session.Table(model.Resource{}.TableName()).
-					Select("id", "path", "object_id", "dir").
-					Where("member_id = ? AND path LIKE ?", request.MemberId, resource.Path+"%").Rows()
-
-				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-					return err
-				}
-				defer util.SafeClose(rows)
-
-				for rows.Next() {
-					var subResource = &model.Resource{}
-					if err := session.ScanRows(rows, subResource); err != nil {
-						return err
-					}
-					if err := s.delete(ctx, subResource); err != nil {
-						return err
-					}
-				}
-				return nil
-			}()
-
-			if err != nil {
-				return err
-			}
-		} else {
-			// 删除文件，
-			if err := s.delete(ctx, resource); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (s *ResourceService) delete(ctx context.Context, resource *model.Resource) error {
-	affected, err := gorm.G[model.Resource](db.Session(ctx)).Where("id = ?", resource.Id).Delete(ctx)
-	if err != nil {
-		return err
-	}
-	if affected == 0 {
-		return nil
-	}
-
-	if !resource.Dir {
-		return s.objectService.UpdateRefCount(ctx, resource.ObjectId, -1)
-	}
-
-	// TODO 关联的业务数据处理
-
-	return nil
-}
+//// Delete 物理删除资源
+//func (s *ResourceService) Delete(ctx context.Context, request *api.ResourceDeleteRequest) error {
+//
+//	session := db.Session(ctx)
+//
+//	// 查询要删除的资源
+//	for _, resourceId := range request.Id {
+//		resource, err := gorm.G[*model.Resource](session).
+//			Select("id", "path", "object_id", "dir").
+//			Where("id = ? AND member_id = ?", resourceId, request.MemberId).Take(ctx)
+//
+//		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+//			return err
+//		}
+//		if errors.Is(err, gorm.ErrRecordNotFound) {
+//			continue
+//		}
+//
+//		if resource.Dir {
+//			err := func() error {
+//				// 删除的是目录，查询所有子级资源，包括自己
+//				rows, err := session.Table(model.Resource{}.TableName()).
+//					Select("id", "path", "object_id", "dir").
+//					Where("member_id = ? AND path LIKE ?", request.MemberId, resource.Path+"%").Rows()
+//
+//				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+//					return err
+//				}
+//				defer util.SafeClose(rows)
+//
+//				for rows.Next() {
+//					var subResource = &model.Resource{}
+//					if err := session.ScanRows(rows, subResource); err != nil {
+//						return err
+//					}
+//					if err := s.delete(ctx, subResource); err != nil {
+//						return err
+//					}
+//				}
+//				return nil
+//			}()
+//
+//			if err != nil {
+//				return err
+//			}
+//		} else {
+//			// 删除文件，
+//			if err := s.delete(ctx, resource); err != nil {
+//				return err
+//			}
+//		}
+//	}
+//	return nil
+//}
+//
+//func (s *ResourceService) delete(ctx context.Context, resource *model.Resource) error {
+//	affected, err := gorm.G[model.Resource](db.Session(ctx)).Where("id = ?", resource.Id).Delete(ctx)
+//	if err != nil {
+//		return err
+//	}
+//	if affected == 0 {
+//		return nil
+//	}
+//
+//	if !resource.Dir {
+//		return s.objectService.UpdateRefCount(ctx, resource.ObjectId, -1)
+//	}
+//
+//	// TODO 关联的业务数据处理
+//
+//	return nil
+//}
 
 // Move 移动资源
 func (s *ResourceService) Move(ctx context.Context, request *api.ResourceMoveRequest) error {
@@ -1300,7 +1300,7 @@ func (s *ResourceService) MoveToRecycleBin(ctx context.Context, request *api.Res
 	session := db.Session(ctx)
 
 	for _, rId := range request.Id {
-		// 检索要删除的资源
+		// 检索要删除的资源，包括子记录
 		resource, entries, err := s.rootAndEntries(ctx, request.MemberId, rId)
 		if err != nil {
 			return err
@@ -1319,11 +1319,31 @@ func (s *ResourceService) MoveToRecycleBin(ctx context.Context, request *api.Res
 		for _, entry := range entries {
 			rIds = append(rIds, entry.Id)
 		}
-		_, err = gorm.G[model.Resource](session).Where("id IN ?", rIds).Delete(ctx)
+		affected, err := gorm.G[model.Resource](session).Where("id IN ?", rIds).Delete(ctx)
 		if err != nil {
 			return err
 		}
-		// TODO 删除关联的业务数据
+
+		if affected != len(rIds) {
+			return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源删除失败"))
+		}
+
+		// 删除分享的记录，只删除文件，不删除文件夹，避免破坏分享目录的结构
+		rIds = make([]int64, 0)
+		if !resource.Dir {
+			rIds = append(rIds, rId)
+		}
+		for _, entry := range entries {
+			if !entry.Dir {
+				rIds = append(rIds, entry.Id)
+			}
+		}
+
+		if len(rIds) > 0 {
+			if _, err := gorm.G[model.ShareResource](session).Where("resource_id IN ?", rIds).Delete(ctx); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

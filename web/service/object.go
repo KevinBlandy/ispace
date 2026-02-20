@@ -109,6 +109,7 @@ func (o *ObjectService) deleteById(ctx context.Context, id int64) error {
 }
 
 // InvalidClean 清理无效的存储对象
+// 已经落盘存储，但是没入库的磁盘资源
 func (o *ObjectService) InvalidClean(ctx context.Context) error {
 
 	// 7 天前

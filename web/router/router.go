@@ -70,7 +70,6 @@ func New() http.Handler {
 	)
 
 	memberApi.Use(
-		MockAuthFilter(int64(10000)),
 		memberAuthFilter, // 认证
 	)
 
@@ -78,7 +77,7 @@ func New() http.Handler {
 	{
 		// 总文件数量/总资源大小/
 		// 上传统计[日/上传数量]
-		memberApi.GET("/resources/stat", NoContent)                                           // TODO 资源统计
+		//memberApi.GET("/resources/stat", NoContent)                                           // TODO 资源统计
 		memberApi.GET("/resources/tree", H(member.DefaultResourceApi().Tree))                 // 完整的文件树
 		memberApi.GET("/resources", H(member.DefaultResourceApi().List))                      // 资源列表
 		memberApi.GET("/resources/:id", H(member.DefaultResourceApi().Content))               // 读取资源
@@ -126,9 +125,9 @@ func New() http.Handler {
 	shareApi := router.Group("/api")
 
 	{
-		shareApi.GET("/share", MockAuthFilter(int64(10000)), memberAuthFilter, H(member.DefaultShareApi.List))         // 分享列表
-		shareApi.PATCH("/share/:id", MockAuthFilter(int64(10000)), memberAuthFilter, H(member.DefaultShareApi.Update)) // 编辑资源
-		shareApi.DELETE("/share", MockAuthFilter(int64(10000)), memberAuthFilter, H(member.DefaultShareApi.Delete))    // 删除资源
+		shareApi.GET("/share", memberAuthFilter, H(member.DefaultShareApi.List))         // 分享列表
+		shareApi.PATCH("/share/:id", memberAuthFilter, H(member.DefaultShareApi.Update)) // 编辑资源
+		shareApi.DELETE("/share", memberAuthFilter, H(member.DefaultShareApi.Delete))    // 删除资源
 
 		// 资源访问，可选的会员认证
 		optionalMemberAuthFilter := H(filter.NewMemberAuthFilter(true).Serve)
@@ -159,10 +158,7 @@ func New() http.Handler {
 	)
 
 	managerApi.Use(
-		// H(filter.DefaultManagerAuthFilter().Serve),
-		func(context *gin.Context) {
-			context.Set(constant.CtxKeySubject, int64(139669356857524224))
-		},
+		H(filter.NewManagerAuthFilter(false).Serve),
 	)
 
 	// 会员管理
@@ -175,7 +171,7 @@ func New() http.Handler {
 
 	// 资源管理
 	{
-		managerApi.GET("/objects/stat", NoContent)                           // TODO 资源统计
+		//managerApi.GET("/objects/stat", NoContent)                           // TODO 资源统计
 		managerApi.GET("/objects", H(manager.DefaultObjectApi.List))         // 资源列表
 		managerApi.PATCH("/objects/:id", H(manager.DefaultObjectApi.Update)) // 更新资源
 		managerApi.DELETE("/objects", H(manager.DefaultObjectApi.Delete))    // 删除资源
