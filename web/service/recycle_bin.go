@@ -77,6 +77,8 @@ func (s RecycleBinService) Delete(ctx context.Context, request *api.RecycleBinDe
 	params = append(params, request.MemberId)
 
 	session := db.Session(ctx)
+
+	// TODO 数据量过大的情况下，应该流式迭代
 	results, err := gorm.G[*model.RecycleBin](session).
 		Select("id", "root", "resource_id", "resource_object_id", "resource_dir").
 		Where(query.String(), params...).
@@ -86,6 +88,7 @@ func (s RecycleBinService) Delete(ctx context.Context, request *api.RecycleBinDe
 	if err != nil {
 		return err
 	}
+
 	for _, result := range results {
 		// 执行删除
 		if err := s.Remove(ctx, result); err != nil {
@@ -164,6 +167,7 @@ func (s RecycleBinService) Restore(ctx context.Context, request *api.RecycleBinR
 	params = append(params, request.MemberId, true)
 
 	session := db.Session(ctx)
+	// TODO 考虑流式
 	results, err := gorm.G[*model.RecycleBin](session).
 		Where(query.String(), params...).
 		Order("create_time DESC").

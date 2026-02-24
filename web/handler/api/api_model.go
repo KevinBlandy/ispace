@@ -34,7 +34,7 @@ type ResourceListResponse struct {
 	Title       string             `json:"title"`             // 资源标题
 	ContentType string             `json:"contentType"`       // 媒体类型
 	Dir         bool               `json:"dir"`               // 是否是目录
-	Size        int64              `json:"size,string"`       // 文件大小
+	Size        int64              `json:"size"`              // 文件大小
 	Status      model.ObjectStatus `json:"status"`            // 文件状态
 	CreateTime  int64              `json:"createTime,string"` // 创建时间
 	UpdateTime  int64              `json:"updateTime,string"` // 更新时间
@@ -42,9 +42,9 @@ type ResourceListResponse struct {
 
 // ResourceMkdirRequest 创建文件夹
 type ResourceMkdirRequest struct {
-	MemberId int64
-	ParentId int64  `json:"parentId,string"` // 父级目录
-	Title    string `json:"title"`           // 文件夹名称
+	MemberId int64  `json:"-"`
+	ParentId int64  `json:"-"`     // 父级目录
+	Title    string `json:"title"` // 文件夹名称
 }
 
 // ResourceRenameRequest 资源重命名请求
@@ -90,7 +90,7 @@ type ResourceSearchResponse struct {
 	Id          int64              `json:"id,string"`
 	Title       string             `json:"title"`             // 资源标题
 	ContentType string             `json:"contentType"`       // 类型
-	Size        int64              `json:"size,string"`       // 文件大小
+	Size        int64              `json:"size"`              // 文件大小
 	Status      model.ObjectStatus `json:"status"`            // 文件状态
 	CreateTime  int64              `json:"createTime,string"` // 创建时间
 	UpdateTime  int64              `json:"updateTime,string"` // 更新时间
@@ -178,7 +178,7 @@ type RecycleBinListResponse struct {
 	Title       string             `json:"title"`             // 资源标题
 	ContentType string             `json:"contentType"`       // 媒体类型
 	Dir         bool               `json:"dir"`               // 是否是目录
-	Size        int64              `json:"size,string"`       // 文件大小
+	Size        int64              `json:"size"`              // 文件大小
 	Status      model.ObjectStatus `json:"status"`            // 文件状态
 	CreateTime  int64              `json:"createTime,string"` // 创建时间
 }
@@ -244,13 +244,13 @@ type ShareListRequest struct {
 // ShareListResponse 资源列表响应
 type ShareListResponse struct {
 	Id         int64  `json:"id,string"`
+	Title      string `json:"title"`
 	Path       string `json:"path"`
 	Enabled    bool   `json:"enabled"`
 	Password   string `json:"password"`
 	Views      int64  `json:"views"`
 	CreateTime int64  `json:"createTime,string"`
 	ExpireTime int64  `json:"expireTime,string"`
-	Title      string `json:"title"`
 }
 
 // ShareUpdateRequest 分享更新请求

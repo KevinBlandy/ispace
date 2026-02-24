@@ -160,6 +160,12 @@ func (r ResourceApi) MkDir(ctx *gin.Context) (any, error) {
 	if err := ctx.ShouldBindJSON(request); err != nil {
 		return nil, err
 	}
+
+	request.ParentId, _ = strconv.ParseInt(ctx.Query("parentId"), 10, 64)
+	if request.ParentId < 1 {
+		request.ParentId = model.DefaultResourceParentId
+	}
+
 	err := db.TransactionWithOutResult(ctx.Request.Context(), func(ctx context.Context) error {
 		return service.DefaultResourceService.Mkdir(ctx, request)
 	})

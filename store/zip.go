@@ -20,11 +20,11 @@ import (
 
 // ArchiveTree 压缩树
 type ArchiveTree struct {
-	File    string         `json:"file"`        // 完整的相对文件路径
-	Title   string         `json:"title"`       // 文件名称
-	Dir     bool           `json:"dir"`         // 是否是目录
-	Size    int64          `json:"size,string"` // 文件大小
-	Entries []*ArchiveTree `json:"entries"`     // 子项目
+	File    string         `json:"file"`    // 完整的相对文件路径
+	Title   string         `json:"title"`   // 文件名称
+	Dir     bool           `json:"dir"`     // 是否是目录
+	Size    int64          `json:"size"`    // 文件大小
+	Entries []*ArchiveTree `json:"entries"` // 子项目
 }
 
 func (s *Store) archiveFile(ctx context.Context, resource *File) (*os.File, error) {
