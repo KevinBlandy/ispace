@@ -59,6 +59,7 @@ func New() http.Handler {
 	// Member Api 接口
 	// ======================================================================
 
+	// 会员鉴权
 	memberAuthFilter := H(filter.NewMemberAuthFilter(true).Serve)
 
 	memberApi := router.Group("/api")
