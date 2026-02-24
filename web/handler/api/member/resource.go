@@ -571,6 +571,19 @@ func (r ResourceApi) Share(g *gin.Context) (any, error) {
 	return response.Ok(result), nil
 }
 
+// Stat 资源统计
+// TODO 待优化，单独统计表，空间换时间
+func (r ResourceApi) Stat(g *gin.Context) (any, error) {
+	memberId := g.GetInt64(constant.CtxKeySubject)
+	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (uint64, error) {
+		return service.DefaultResourceService.TotalSize(ctx, memberId)
+	}, db.TxReadOnly)
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(&api.MemberResourceStatResponse{Size: ret}), nil
+}
+
 var DefaultResourceApi = sync.OnceValue(func() *ResourceApi {
 	return NewResourceApi()
 })

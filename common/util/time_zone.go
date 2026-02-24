@@ -7,6 +7,7 @@ import (
 
 // TimeZoneOffset 根据传入的 t 和 time.Location, 计算 loc 和 UTC 的偏移字符串
 // 例如 +08:00
+// Gen By Gemini
 func TimeZoneOffset(t time.Time, loc *time.Location) string {
 	if loc == nil {
 		return "+00:00"

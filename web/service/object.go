@@ -104,7 +104,15 @@ func (o *ObjectService) deleteById(ctx context.Context, id int64) error {
 	}
 	// 删除回收站数据
 	_, err = gorm.G[model.RecycleBin](db.Session(ctx)).Where("recource_object_id = ?", id).Delete(ctx)
-	// TODO 其他业务逻辑
+	if err != nil {
+		return err
+	}
+
+	// 删除分享数据
+	_, err = gorm.G[model.ShareResource](db.Session(ctx)).Where("recource_object_id = ?", id).Delete(ctx)
+
+	// TODO 修改统计数据
+
 	return err
 }
 
@@ -186,6 +194,59 @@ func (o *ObjectService) UpdateRefCount(ctx context.Context, id int64, count int6
 		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("存储引用更新失败"))
 	}
 	return nil
+}
+
+// Stat 资源统计
+func (o *ObjectService) Stat(ctx context.Context) (*api.ObjectStatResponse, error) {
+
+	var ret = &api.ObjectStatResponse{}
+
+	session := db.Session(ctx)
+
+	// 总统计
+	if err := session.Raw("SELECT IFNULL(SUM(size), 0), IFNULL(SUM(file_size), 0), COUNT(id) FROM t_object").
+		Row().
+		Scan(&ret.Size, &ret.FileSize, &ret.Total); err != nil {
+		return nil, err
+	}
+
+	// 上下文中的时区信息
+	now := util.ContextValue[time.Time](ctx, constant.CtxKeyRequestTime)
+	timeZone := util.ContextValue[*time.Location](ctx, constant.CtxKeyTimezone)
+
+	// 当前时间在客户端的时区
+	now = now.In(timeZone)
+
+	// 统计最近30天的数据
+	// TODO 替换为 group
+	for i := range 30 {
+
+		day := now.AddDate(0, 0, -i)
+
+		var dailyStat = api.ObjectDailyStat{
+			Date: day.Format(time.DateOnly),
+		}
+
+		// 此日开始和结束
+		dayStart := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, day.Location()).UnixMilli()
+		dayEnd := time.Date(day.Year(), day.Month(), day.Day(), 23, 59, 59, 999999999, day.Location()).UnixMilli()
+
+		// 此日的统计
+		err := session.
+			Raw("SELECT IFNULL(SUM(size), 0), IFNULL(SUM(file_size), 0), COUNT(id) FROM t_object WHERE create_time BETWEEN ? AND ?",
+				dayStart, dayEnd,
+			).
+			Row().
+			Scan(&dailyStat.Size, &dailyStat.FileSize, &dailyStat.Total)
+		if err != nil {
+			return nil, err
+		}
+		ret.Daily = append(ret.Daily, &dailyStat)
+	}
+
+	// slices.Reverse(ret.Daily)
+
+	return ret, nil
 }
 
 var DefaultObjectService = NewObjectService()

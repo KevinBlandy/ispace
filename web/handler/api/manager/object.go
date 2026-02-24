@@ -69,4 +69,14 @@ func (o *ObjectApi) Delete(g *gin.Context) (any, error) {
 	return response.Ok(nil), nil
 }
 
+func (o *ObjectApi) Stat(g *gin.Context) (any, error) {
+	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*api.ObjectStatResponse, error) {
+		return o.objectService.Stat(ctx)
+	}, db.TxReadOnly)
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(ret), nil
+}
+
 var DefaultObjectApi = NewObjectApi(service.NewObjectService())

@@ -115,3 +115,19 @@ type AdminProfileUpdateRequest struct {
 	Email    string `json:"email"`
 	Avatar   string `json:"avatar"`
 }
+
+// ObjectStatResponse 资源统计
+type ObjectStatResponse struct {
+	Total    int64              `json:"total"`    // 总资源文件数量
+	Size     uint64             `json:"size"`     // 总资源逻辑大小
+	FileSize int64              `json:"fileSize"` // 实际占用空间大小
+	Daily    []*ObjectDailyStat `json:"daily"`    // 每日统计
+}
+
+// ObjectDailyStat 每日统计
+type ObjectDailyStat struct {
+	Date     string `json:"date"`     // 日期
+	Total    uint64 `json:"total"`    // 上传文件数量
+	Size     uint64 `json:"size"`     // 上传文件大小
+	FileSize uint64 `json:"fileSize"` // 实际文件大小
+}

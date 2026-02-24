@@ -308,3 +308,8 @@ type ShareResourceDownloadRequest struct {
 	Identifier types.Identifier `json:"-"`
 	Id         []int64          `json:"id,string"` // 要下载的记录 ID
 }
+
+// MemberResourceStatResponse 会员的资源统计
+type MemberResourceStatResponse struct {
+	Size uint64 `json:"size"` // 总资源大小
+}

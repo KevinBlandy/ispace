@@ -1165,7 +1165,7 @@ func (s *ResourceService) Group(ctx context.Context, request *api.ResourceGroupR
 	// 分组字段
 	var groupField string
 
-	// TODO 数据库方言
+	// TODO 此处用到了数据库方言
 	switch request.Group {
 	case "day": // 2026-01-28
 		groupField = "date(t.create_time / 1000, 'unixepoch', '" + offset + "')"
@@ -1495,6 +1495,44 @@ func (s *ResourceService) Nested(resources []*model.Resource) ([]*model.Resource
 		}
 	}
 	return nil, false
+}
+
+// TotalSize 总计资源的逻辑总存储大小
+func (s *ResourceService) TotalSize(ctx context.Context, memberId int64) (uint64, error) {
+	var objectSize uint64
+	err := db.Session(ctx).Raw(`
+		SELECT
+			IFNULL(SUM(t1.size), 0) 
+		FROM
+			t_resource t
+			INNER JOIN t_object t1 ON t1.id = t.object_id
+		WHERE
+			t.member_id = ?
+		AND
+			t.dir = ?
+	`, memberId, false).Row().Scan(&objectSize)
+
+	if err != nil {
+		return 0, err
+	}
+
+	// 回收站中的资源也要进行统计
+	var recycleBinSize uint64
+	err = db.Session(ctx).Raw(`
+		SELECT
+			IFNULL(SUM(t1.size), 0) 
+		FROM
+			t_recycle_bin t
+			INNER JOIN t_object t1 ON t1.id = t.resource_object_id
+		WHERE
+			t.member_id = ?
+		AND
+			t.resource_dir = ?
+	`, memberId, false).Row().Scan(&recycleBinSize)
+	if err != nil {
+		return 0, err
+	}
+	return objectSize + recycleBinSize, nil
 }
 
 var DefaultResourceService = NewResourceService(DefaultObjectService,
