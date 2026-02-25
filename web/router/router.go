@@ -67,12 +67,17 @@ func New() http.Handler {
 	// 登录
 	memberApi.POST("/sign-in",
 		H(handler.DefaultCaptcha().Validate), // 验证码
-		H(member.DefaultSignInApi.Serve),
+		H(member.DefaultSignInApi.SignIn),
 	)
 
 	memberApi.Use(
 		memberAuthFilter, // 认证
 	)
+
+	// 登出
+	{
+		memberApi.POST("/sign-out", H(member.DefaultSignInApi.SignOut))
+	}
 
 	// 文件 API 接口
 	{
@@ -153,7 +158,7 @@ func New() http.Handler {
 
 	managerApi.POST("/sign-in",
 		H(handler.DefaultCaptcha().Validate),
-		H(member.DefaultSignInApi.Serve),
+		H(manager.DefaultSignInApi.SignIn),
 	)
 
 	managerApi.Use(

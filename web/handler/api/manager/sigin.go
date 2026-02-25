@@ -20,7 +20,7 @@ type SignInApi struct {
 	adminService *service.AdminService
 }
 
-func (a *SignInApi) Serve(ctx *gin.Context) (any, error) {
+func (a *SignInApi) SignIn(ctx *gin.Context) (any, error) {
 	var request = api.ManagerSignInRequest{}
 	if err := ctx.ShouldBindJSON(&request); err != nil {
 		return nil, err

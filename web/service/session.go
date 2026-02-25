@@ -156,6 +156,14 @@ func (a *SessionService) Renewal(ctx context.Context, session *Session) (bool, e
 	})
 }
 
+// Invalid 失效 Session
+func (a *SessionService) Invalid(session *Session) error {
+	_, err := rdb.ExecuteClient(a.redisConn, func(conn *redis.Conn) (int64, error) {
+		return conn.Del(context.Background(), a.sessionKey(strconv.FormatInt(session.Subject, 10), session.Id)).Result()
+	})
+	return err
+}
+
 //// keyFunc 返回 jwt 加密 key
 //func (a *SessionService) keyFunc(_ *jwt.Token) (any, error) {
 //	return []byte(a.sysConfigService.Get(context.Background(), model.SysConfigKeySessionSecret).Value), nil

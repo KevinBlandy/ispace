@@ -22,7 +22,7 @@ func NewSignInApi(memberService *service.MemberService) *SignInApi {
 	return &SignInApi{memberService: memberService}
 }
 
-func (s *SignInApi) Serve(ctx *gin.Context) (any, error) {
+func (s *SignInApi) SignIn(ctx *gin.Context) (any, error) {
 
 	var request = &api.MemberSignInRequest{}
 	if err := ctx.ShouldBindBodyWithJSON(request); err != nil {
@@ -47,6 +47,21 @@ func (s *SignInApi) Serve(ctx *gin.Context) (any, error) {
 		Value:    signed,
 		Path:     "/",
 		MaxAge:   int((time.Hour * 24 * 365).Seconds()),
+		HttpOnly: true,
+		SameSite: http.SameSiteDefaultMode,
+	})
+	return response.Ok(nil), nil
+}
+
+func (s *SignInApi) SignOut(ctx *gin.Context) (any, error) {
+	err := service.DefaultMemberSessionService().Invalid(ctx.MustGet(constant.CtxKeySession).(*service.Session))
+	if err != nil {
+		return nil, err
+	}
+	ctx.SetCookieData(&http.Cookie{
+		Name:     constant.HttpCookieMemberToken,
+		Path:     "/",
+		MaxAge:   -1, // 立即删除
 		HttpOnly: true,
 		SameSite: http.SameSiteDefaultMode,
 	})
