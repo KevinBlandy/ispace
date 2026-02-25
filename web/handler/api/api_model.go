@@ -78,6 +78,11 @@ type ResourceFlashUploadRequest struct {
 	Hash  string `json:"hash"`  // 资源 Hash
 }
 
+// ResourceUploadDownloadResponse 任务 ID
+type ResourceUploadDownloadResponse struct {
+	TaskId string `json:"taskId"`
+}
+
 // ResourceSearchRequest 资源搜索请求
 type ResourceSearchRequest struct {
 	Pager    *page.Pager

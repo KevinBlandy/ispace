@@ -6,7 +6,9 @@ import (
 	"errors"
 	"io"
 	"ispace/common"
+	"ispace/common/concurrent"
 	"ispace/common/constant"
+	"ispace/common/id"
 	"ispace/common/page"
 	"ispace/common/response"
 	"ispace/common/util"
@@ -24,16 +26,21 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/gin-contrib/sse"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 type ResourceApi struct {
+	downloadTask *concurrent.Map[string, chan sse.Event]
 }
 
 func NewResourceApi() *ResourceApi {
-	return &ResourceApi{}
+	return &ResourceApi{
+		downloadTask: concurrent.NewMap[string, chan sse.Event](),
+	}
 }
 
 // Tree 完整的文件树
@@ -443,65 +450,154 @@ func (r ResourceApi) UploadGet(g *gin.Context) (any, error) {
 
 	memberId := g.GetInt64(constant.CtxKeySubject)
 	parentId, _ := strconv.ParseInt(g.Query("parentId"), 10, 64)
-	if parentId < 1 {
+	if parentId < 0 {
 		parentId = model.DefaultResourceParentId
 	}
 
-	// 创建临时文件
-	tmpFile, err := os.CreateTemp("", strconv.FormatInt(memberId, 10)+"-*")
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = os.RemoveAll(tmpFile.Name()) // 始终删除临时文件
-	}()
-	defer util.SafeClose(tmpFile)
+	taskId := id.UUID()
 
-	// 请求资源
-	client := &http.Client{}
-	req, err := http.NewRequest(http.MethodGet, objectUrl.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "ispace/object-downloader")
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer util.SafeClose(resp.Body)
+	ch := make(chan sse.Event)
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源下载失败，状态码："+resp.Status))
-	}
+	r.downloadTask.Store(taskId, ch)
 
-	// io 到临时文件
-	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
-		return nil, err
-	}
-	stat, err := tmpFile.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if stat.Size() == 0 {
-		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("下载文件不能为空"))
-	}
+	/*
+		异步下载，任务会推送每一步的事件到 Channel
+		延迟 2s，充足给客户端创建连接的时间
+	*/
+	time.AfterFunc(time.Second*2, func() {
 
-	// 解析出文件名称
-	fileName := path.Base(objectUrl.Path)
-	if fileName == "." || fileName == "/" {
-		// 解析不到路径名称的时候，则直接对整个地址进行编码作为文件名称
-		objectUrl.RawQuery = ""
-		objectUrl.Fragment = ""
-		fileName = url.QueryEscape(objectUrl.String())
-	}
+		defer func() {
+			if ch, ok := r.downloadTask.LoadAndDelete(taskId); ok {
+				close(ch)
+			}
+		}()
 
-	err = db.TransactionWithOutResult(g.Request.Context(), func(ctx context.Context) error {
-		return service.DefaultResourceService.Upload(ctx, memberId, parentId, service.NewLocalFileResource(stat.Size(), fileName, tmpFile))
+		var push = func(e sse.Event) {
+			select {
+			case ch <- e:
+			default:
+			}
+		}
+
+		// 创建临时文件
+		tmpFile, err := os.CreateTemp("", strconv.FormatInt(memberId, 10)+"-*")
+		if err != nil {
+			return
+		}
+		defer func() {
+			_ = os.RemoveAll(tmpFile.Name()) // 始终删除临时文件
+		}()
+		defer util.SafeClose(tmpFile)
+
+		// 请求资源
+		client := &http.Client{}
+		req, err := http.NewRequest(http.MethodGet, objectUrl.String(), nil)
+		if err != nil {
+			push(sse.Event{Event: "error", Data: err.Error()})
+			return
+		}
+		req.Header.Set("User-Agent", "ispace/object-downloader")
+		resp, err := client.Do(req)
+		if err != nil {
+			push(sse.Event{Event: "error", Data: err.Error()})
+			return
+		}
+		defer util.SafeClose(resp.Body)
+
+		if resp.StatusCode != http.StatusOK {
+			push(sse.Event{Event: "error", Data: "资源下载失败，状态码：" + resp.Status})
+			return
+		}
+
+		// io 到临时文件
+		//if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+		//	conn.LPush(g.Request.Context(), taskId, strings.Join([]string{"error", err.Error()}, "-"))
+		//	return
+		//}
+
+		// Copy
+		var written int64
+		var buf int64 = 4096 // 4Kb 缓冲区
+		for {
+			var err error
+			written, err = io.CopyN(tmpFile, resp.Body, buf)
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				push(sse.Event{Event: "error", Data: err.Error()})
+				return
+			}
+			push(sse.Event{Event: "progress", Data: strconv.FormatInt(written, 10)})
+		}
+
+		if written > 0 {
+			push(sse.Event{Event: "progress", Data: strconv.FormatInt(written, 10)})
+		}
+
+		stat, err := tmpFile.Stat()
+		if err != nil {
+			push(sse.Event{Event: "error", Data: err.Error()})
+			return
+		}
+		if stat.Size() == 0 {
+			push(sse.Event{Event: "error", Data: "下载文件为空"})
+			return
+		}
+
+		// 解析出文件名称
+		fileName := path.Base(objectUrl.Path)
+		if fileName == "." || fileName == "/" {
+			// 解析不到路径名称的时候，则直接对整个地址进行编码作为文件名称
+			objectUrl.RawQuery = ""
+			objectUrl.Fragment = ""
+			fileName = url.QueryEscape(objectUrl.String())
+		}
+
+		err = db.TransactionWithOutResult(context.Background(), func(ctx context.Context) error {
+			return service.DefaultResourceService.Upload(ctx, memberId, parentId, service.NewLocalFileResource(stat.Size(), fileName, tmpFile))
+		})
+		if err != nil {
+			push(sse.Event{Event: "error", Data: err.Error()})
+			return
+		}
+
+		push(sse.Event{Event: "done", Data: fileName})
+		return
 	})
-	if err != nil {
-		return nil, err
+
+	return response.Ok(&api.ResourceUploadDownloadResponse{
+		TaskId: taskId,
+	}), nil
+}
+
+func (r ResourceApi) UploadGetEvents(g *gin.Context) {
+
+	defer util.SafeClose(g.Request.Body)
+
+	taskId := g.Param("taskId")
+	if taskId == "" {
+		g.AbortWithStatus(http.StatusNotFound)
+		return
 	}
-	return response.Ok(nil), nil
+
+	ch, ok := r.downloadTask.Load(taskId)
+	if !ok {
+		g.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+
+	g.Writer.Header().Set("Content-Type", "text/event-stream") // SSE
+	g.Writer.Header().Set("Cache-Control", "no-cache")
+	g.Writer.Header().Set("Connection", "keep-alive")
+
+	g.Stream(func(w io.Writer) bool {
+		if e, done := <-ch; done {
+			g.SSEvent(e.Event, e.Data)
+			return true
+		}
+		return false //  返回 false 结束 sse
+	})
 }
 
 // Search 搜索文件

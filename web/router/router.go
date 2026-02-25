@@ -81,24 +81,25 @@ func New() http.Handler {
 
 	// 文件 API 接口
 	{
-		memberApi.GET("/resources/stat", H(member.DefaultResourceApi().Stat))                 // 资源统计
-		memberApi.GET("/resources/tree", H(member.DefaultResourceApi().Tree))                 // 完整的文件树
-		memberApi.GET("/resources", H(member.DefaultResourceApi().List))                      // 资源列表
-		memberApi.GET("/resources/:id", H(member.DefaultResourceApi().Content))               // 读取资源
-		memberApi.POST("/resources/upload", H(member.DefaultResourceApi().Upload))            // 上传单个资源
-		memberApi.POST("/resources/upload/flash", H(member.DefaultResourceApi().UploadFlash)) // 快传资源
-		memberApi.POST("/resources/upload/dir", H(member.DefaultResourceApi().UploadDir))     // 上传文件夹
-		memberApi.POST("/resources/upload/get", H(member.DefaultResourceApi().UploadGet))     // 下载远程资源
-		memberApi.POST("/resources/mkdir", H(member.DefaultResourceApi().MkDir))              // 创建目录
-		memberApi.POST("/resources/:id/rename", H(member.DefaultResourceApi().Rename))        // 重命名资源
-		memberApi.DELETE("/resources", H(member.DefaultResourceApi().Delete))                 // 删除资源
-		memberApi.POST("/resources/move", H(member.DefaultResourceApi().Move))                // 移动资源
-		memberApi.GET("/resources/download", H(member.DefaultResourceApi().Download))         // 下载资源
-		memberApi.GET("/resources/:id/unarchive", H(member.DefaultResourceApi().Unarchive))   // 解压资源
-		memberApi.GET("/resources/search", H(member.DefaultResourceApi().Search))             // 搜索资源
-		memberApi.GET("/resources/recent", H(member.DefaultResourceApi().Recent))             // 最近上传
-		memberApi.GET("/resources/group", H(member.DefaultResourceApi().Group))               // 资源分组
-		memberApi.POST("/resources/share", H(member.DefaultResourceApi().Share))              // 资源分享
+		memberApi.GET("/resources/stat", H(member.DefaultResourceApi().Stat))                                   // 资源统计
+		memberApi.GET("/resources/tree", H(member.DefaultResourceApi().Tree))                                   // 完整的文件树
+		memberApi.GET("/resources", H(member.DefaultResourceApi().List))                                        // 资源列表
+		memberApi.GET("/resources/:id", H(member.DefaultResourceApi().Content))                                 // 读取资源
+		memberApi.POST("/resources/upload", H(member.DefaultResourceApi().Upload))                              // 上传单个资源
+		memberApi.POST("/resources/upload/flash", H(member.DefaultResourceApi().UploadFlash))                   // 快传资源
+		memberApi.POST("/resources/upload/dir", H(member.DefaultResourceApi().UploadDir))                       // 上传文件夹
+		memberApi.POST("/resources/upload/download", H(member.DefaultResourceApi().UploadGet))                  // 下载远程资源
+		memberApi.GET("/resources/upload/download/events/:taskId", member.DefaultResourceApi().UploadGetEvents) // 下载远程资源事件
+		memberApi.POST("/resources/mkdir", H(member.DefaultResourceApi().MkDir))                                // 创建目录
+		memberApi.POST("/resources/:id/rename", H(member.DefaultResourceApi().Rename))                          // 重命名资源
+		memberApi.DELETE("/resources", H(member.DefaultResourceApi().Delete))                                   // 删除资源
+		memberApi.POST("/resources/move", H(member.DefaultResourceApi().Move))                                  // 移动资源
+		memberApi.GET("/resources/download", H(member.DefaultResourceApi().Download))                           // 下载资源
+		memberApi.GET("/resources/:id/unarchive", H(member.DefaultResourceApi().Unarchive))                     // 解压资源
+		memberApi.GET("/resources/search", H(member.DefaultResourceApi().Search))                               // 搜索资源
+		memberApi.GET("/resources/recent", H(member.DefaultResourceApi().Recent))                               // 最近上传
+		memberApi.GET("/resources/group", H(member.DefaultResourceApi().Group))                                 // 资源分组
+		memberApi.POST("/resources/share", H(member.DefaultResourceApi().Share))                                // 资源分享
 
 	}
 
