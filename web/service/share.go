@@ -177,10 +177,10 @@ func (s ShareService) Share(ctx context.Context, identifier types.Identifier) (*
 		return nil, err
 	}
 	if share == nil || share.Id == 0 {
-		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("访问的资源不存在"))
+		return nil, common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("访问的资源不存在"))
 	}
 	if !share.Enabled {
-		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源被屏蔽了"))
+		return nil, common.NewServiceError(http.StatusForbidden, response.Fail(response.CodeForbidden).WithMessage("资源被屏蔽了"))
 	}
 
 	// 检索会员信息

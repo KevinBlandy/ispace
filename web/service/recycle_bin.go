@@ -84,7 +84,7 @@ func (s RecycleBinService) Delete(ctx context.Context, request *api.RecycleBinDe
 
 	// TODO 数据量过大的情况下，应该流式迭代
 	results, err := gorm.G[*model.RecycleBin](session).
-		Select("id", "root", "resource_id", "resource_object_id", "resource_dir").
+		Select("id", "root", "resource_id", "resource_object_id", "resource_dir", "member_id").
 		Where(query.String(), params...).
 		Order("id DESC"). // 根据 ID 逆序，后删除的先执行
 		Find(ctx)
@@ -116,7 +116,7 @@ func (s RecycleBinService) Remove(ctx context.Context, m *model.RecycleBin) erro
 		// 递归删除不包含 root 的子项目
 		// 回收站中，同一个资源不可能被删除两次
 		results, err := gorm.G[*model.RecycleBin](session).
-			Select("id", "root", "resource_id", "resource_object_id", "resource_dir").
+			Select("id", "root", "resource_id", "resource_object_id", "resource_dir", "member_id").
 			Where("resource_parent_id = ? AND root = ?", m.ResourceId, false).
 			Find(ctx)
 
@@ -149,8 +149,15 @@ func (s RecycleBinService) delete(ctx context.Context, m *model.RecycleBin) erro
 	if m.ResourceDir {
 		return nil
 	}
-
-	// 如果是文件的话，还要递减对应的引用计数
+	// 递减用户的空间使用量
+	var size int64
+	if err := session.Raw("SELECT size FROM t_object where id = ?", m.ResourceObjectId).Row().Scan(&size); err != nil {
+		return err
+	}
+	if err := s.resourceService.AddUsedStorageSpace(ctx, m.MemberId, -size); err != nil {
+		return err
+	}
+	// 递减对应的引用计数
 	return s.objectService.UpdateRefCount(ctx, m.ResourceObjectId, -1)
 }
 
