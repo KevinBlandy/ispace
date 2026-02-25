@@ -33,6 +33,7 @@ type ShareResource struct {
 	ResourceDir         bool   // 资源是否是目录
 	ResourceContentType string // 资源类型
 	ResourceDepth       uint64 // 资源树深度
+	ResourceCreateTime  int64  // 资源创建时间
 }
 
 func (ShareResource) TableName() string {

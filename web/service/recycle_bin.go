@@ -53,7 +53,7 @@ func (s RecycleBinService) List(ctx context.Context, request *api.RecycleBinList
 	ORDER BY t.create_time DESC
 `)
 
-	var condition = []any{true, request.MemberId, true}
+	var condition = []any{false, request.MemberId, true}
 	if request.Title != "" {
 		query.WriteString(" AND resource_title like ?")
 		condition = append(condition, "%"+request.Title+"%")
@@ -67,14 +67,18 @@ func (s RecycleBinService) Delete(ctx context.Context, request *api.RecycleBinDe
 	var query = &strings.Builder{}
 	var params []any
 
-	// 如果没传 ID，则表示删除所有
-	if len(request.Id) > 0 {
-		query.WriteString("id IN ? AND ")
-		params = append(params, request.Id)
-	}
-
 	query.WriteString("member_id = ?")
 	params = append(params, request.MemberId)
+
+	if len(request.Id) > 0 {
+		// 删除指定的记录
+		query.WriteString(" AND id IN ?")
+		params = append(params, request.Id)
+	} else {
+		// 如果没传 ID，则表示删除所有，直接检索所有的 root 记录
+		query.WriteString(" AND root = ?")
+		params = append(params, true)
+	}
 
 	session := db.Session(ctx)
 
@@ -82,7 +86,7 @@ func (s RecycleBinService) Delete(ctx context.Context, request *api.RecycleBinDe
 	results, err := gorm.G[*model.RecycleBin](session).
 		Select("id", "root", "resource_id", "resource_object_id", "resource_dir").
 		Where(query.String(), params...).
-		Order("create_time DESC").
+		Order("id DESC"). // 根据 ID 逆序，后删除的先执行
 		Find(ctx)
 
 	if err != nil {
@@ -110,6 +114,7 @@ func (s RecycleBinService) Remove(ctx context.Context, m *model.RecycleBin) erro
 	session := db.Session(ctx)
 	if m.ResourceDir {
 		// 递归删除不包含 root 的子项目
+		// 回收站中，同一个资源不可能被删除两次
 		results, err := gorm.G[*model.RecycleBin](session).
 			Select("id", "root", "resource_id", "resource_object_id", "resource_dir").
 			Where("resource_parent_id = ? AND root = ?", m.ResourceId, false).
@@ -259,6 +264,7 @@ func (s RecycleBinService) restore(ctx context.Context, root *model.RecycleBin, 
 			noChange = true
 		}
 	} else {
+		// 本身就是从根目录删除的资源
 		noChange = true
 	}
 
@@ -271,19 +277,6 @@ func (s RecycleBinService) restore(ctx context.Context, root *model.RecycleBin, 
 		// root 资源移动到根目录
 		root.ResourceParentId = model.DefaultResourceParentId
 
-		// 重名处理
-		var err error
-		root.ResourceTitle, err = s.resourceService.UniqueTitle(ctx,
-			root.ResourceDir,
-			root.ResourceTitle,
-			root.ResourceId,
-			root.MemberId,
-			root.ResourceParentId,
-		)
-		if err != nil {
-			return err
-		}
-
 		// 修改所有子结构
 		for _, entry := range append(entries, root) {
 			entry.ResourcePath = strings.ReplaceAll(entry.ResourcePath, prefix, "")
@@ -291,11 +284,24 @@ func (s RecycleBinService) restore(ctx context.Context, root *model.RecycleBin, 
 		}
 	}
 
-	// 恢复资源
+	// 重名处理，可能在删除后又新建了同名资源
+	var err error
+	root.ResourceTitle, err = s.resourceService.UniqueTitle(ctx,
+		root.ResourceDir,
+		root.ResourceTitle,
+		root.ResourceId,
+		root.MemberId,
+		root.ResourceParentId,
+	)
+	if err != nil {
+		return err
+	}
+
+	// 恢复资源到目录
 	var resources []*model.Resource
 	for _, entry := range append(entries, root) {
 		resources = append(resources, &model.Resource{
-			Id:          entry.ResourceId, // TODO 保持资源 ID 不变？
+			Id:          entry.ResourceId,
 			ObjectId:    entry.ResourceObjectId,
 			ParentId:    entry.ResourceParentId,
 			Title:       entry.ResourceTitle,

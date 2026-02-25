@@ -52,7 +52,7 @@ func (r ResourceApi) Tree(ctx *gin.Context) (any, error) {
 func (r ResourceApi) List(ctx *gin.Context) (any, error) {
 
 	parentId, err := strconv.ParseInt(ctx.Query("parentId"), 10, 64)
-	if err != nil || parentId < 0 {
+	if err != nil || parentId < 1 {
 		parentId = model.DefaultResourceParentId
 	}
 

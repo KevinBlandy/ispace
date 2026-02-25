@@ -95,7 +95,7 @@ func (s *ResourceService) List(ctx context.Context, request *api.ResourceListReq
 				t.member_id = ?`)
 
 	// 条件
-	if request.ParentId > 0 {
+	if request.ParentId >= 0 {
 		statement.WriteString(" AND t.parent_id = ?")
 		params = append(params, request.ParentId)
 	}
@@ -1466,6 +1466,7 @@ func (s *ResourceService) share(ctx context.Context, request *api.ResourceShareR
 				ResourceDir:         item.Dir,
 				ResourceContentType: item.ContentType,
 				ResourceDepth:       item.Depth,
+				ResourceCreateTime:  item.CreateTime,
 			})
 		}
 	}

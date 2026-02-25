@@ -95,7 +95,7 @@ func (a ShareApi) ResourceList(g *gin.Context) (any, error) {
 	}
 	request.Title = g.Query("title")
 	request.ParentId, _ = strconv.ParseInt(g.Query("parentId"), 10, 64)
-	if request.ParentId == 0 {
+	if request.ParentId < 1 {
 		request.ParentId = model.DefaultResourceParentId
 	}
 
@@ -139,6 +139,10 @@ func (a ShareApi) Verify(g *gin.Context) (any, error) {
 	}
 	if share.Password == "" {
 		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("该资源无需密码"))
+	}
+
+	if share.Password != request.Password {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("密码错误"))
 	}
 
 	// Token 有效期 24H

@@ -137,15 +137,13 @@ SELECT
 	t1.resource_title title,
 	t1.resource_dir dir,
 	t1.resource_content_type contentType,
+	t1.resource_create_time create_time,
 	t2.size,
-	t2.status,
-	-- 资源的实际创建时间
-	t3.create_time
+	t2.status
 FROM
 	t_share t
 	INNER JOIN t_share_resource t1 ON t1.share_id = t.id
 	LEFT JOIN t_object t2 ON t2.id = t1.resource_object_id AND t1.resource_dir = ?
-	INNER JOIN t_resource t3 ON t3.id = t1.resource_id
 WHERE
 	t.id = ?
 `)
