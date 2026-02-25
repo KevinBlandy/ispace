@@ -134,3 +134,14 @@ type ObjectDailyStat struct {
 	Size     uint64 `json:"size"`     // 上传文件大小
 	FileSize uint64 `json:"fileSize"` // 实际文件大小
 }
+
+// SysConfigListResponse 系统配置
+type SysConfigListResponse struct {
+	Id         int64                    `json:"id,string"`
+	Key        model.SysConfigKey       `json:"key"`               // 配置 Key
+	Value      string                   `json:"value"`             // 配置 Value
+	ValueType  model.SysConfigValueType `json:"valueType"`         // 配置值类型
+	Remark     string                   `json:"remark"`            // 备注
+	CreateTime int64                    `json:"createTime,string"` // 创建时间
+	UpdateTime int64                    `json:"updateTime,string"` // 更新时间
+}

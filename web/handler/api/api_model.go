@@ -62,9 +62,10 @@ type ResourceDeleteRequest struct {
 
 // ResourceMoveRequest 移动资源
 type ResourceMoveRequest struct {
-	MemberId int64
-	Id       types.Int64Slice `json:"id,string"`       // From 资源 Id
-	ParentId int64            `json:"parentId,string"` // 目标 ID
+	MemberId int64            `json:"-"`
+	ParentId int64            `json:"-"`         // 目标 ID
+	Id       types.Int64Slice `json:"id,string"` // From 资源 Id
+
 }
 
 // ObjectHashResponse 对象的 Hash 查询结果

@@ -189,6 +189,11 @@ func New() http.Handler {
 		managerApi.POST("/account/password", H(manager.DefaultAccountSettingApi.UpdatePassword)) // 修改账户的密码
 	}
 
+	// TODO 系统配置
+	{
+		managerApi.GET("/sys-configs", H(manager.DefaultSysConfigApi.List))
+	}
+
 	// 静态资源在最后
 	router.Use(handler.NewFsHandler(
 		http.FS(util.Require(func() (*os.Root, error) { // 指定的公共目录优先级最高
