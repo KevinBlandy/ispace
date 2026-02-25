@@ -21,37 +21,40 @@ type MemberListRequest struct {
 
 // MemberListResponse 会员列表响应
 type MemberListResponse struct {
-	Id           int64  `json:"id,string"`
-	NickName     string `json:"nickName"`
-	Avatar       string `json:"avatar"`
-	Account      string `json:"account"`
-	Email        string `json:"email"`
-	Enabled      bool   `json:"enabled"`
-	CreateTime   int64  `json:"createTime,string"`
-	UpdateTime   int64  `json:"updateTime,string"`
-	Resources    int64  `json:"resources"`           // 资源数量
-	ResourceSize int64  `json:"resourceSize,string"` // 资源大小
+	Id               int64  `json:"id,string"`
+	NickName         string `json:"nickName"`
+	Avatar           string `json:"avatar"`
+	Account          string `json:"account"`
+	Email            string `json:"email"`
+	Enabled          bool   `json:"enabled"`
+	CreateTime       int64  `json:"createTime,string"`
+	UpdateTime       int64  `json:"updateTime,string"`
+	Resources        int64  `json:"resources"`        // 资源数量
+	UsedStorageSpace int64  `json:"usedStorageSpace"` // 已使用的存储空间
+	MaxStorageSpace  int64  `json:"maxStorageSpace"`  // 最多可使用的空间
 }
 
 // MemberCreateRequest 创建会员
 type MemberCreateRequest struct {
-	NickName string `json:"nickName"` // 昵称
-	Account  string `json:"account"`  // 账户
-	Password string `json:"password"` // 密码
-	Email    string `json:"email"`    // 邮箱
-	Enabled  bool   `json:"enabled"`  // 状态
+	NickName        string `json:"nickName"`        // 昵称
+	Account         string `json:"account"`         // 账户
+	Password        string `json:"password"`        // 密码
+	Email           string `json:"email"`           // 邮箱
+	Enabled         bool   `json:"enabled"`         // 状态
+	MaxStorageSpace int64  `json:"maxStorageSpace"` // 最多可使用的空间
 }
 
 // MemberUpdateRequest 会员更新
 type MemberUpdateRequest struct {
 	Id int64 `json:"-"`
 	// MemberCreateRequest
-	Avatar   string `json:"avatar"`
-	NickName string `json:"nickName"`
-	Account  string `json:"account"`  // 账户
-	Password string `json:"password"` // 密码
-	Email    string `json:"email"`    // 邮箱
-	Enabled  *bool  `json:"enabled"`  // 状态
+	Avatar          string `json:"avatar"`
+	NickName        string `json:"nickName"`
+	Account         string `json:"account"`         // 账户
+	Password        string `json:"password"`        // 密码
+	Email           string `json:"email"`           // 邮箱
+	Enabled         *bool  `json:"enabled"`         // 状态
+	MaxStorageSpace *int64 `json:"maxStorageSpace"` // 最多可使用的空间
 }
 
 // MemberDeleteRequest 会员删除

@@ -70,22 +70,12 @@ func (m *MemberService) List(ctx context.Context, request *api.MemberListRequest
 					enabled,
 					create_time,
 					update_time,
+					used_storage_space,
+					max_storage_space,
 					-- 文件资源数量
 					(
 						SELECT COUNT(1) FROM t_resource t1 WHERE t1.member_id = t.id AND t1.dir = 0
-					)  resources,
-					-- 文件资源大小
-					(
-						SELECT 
-							SUM(t2.size) 
-						FROM 
-							t_resource t1 
-							INNER JOIN t_object t2 ON t2.id = t1.object_id
-						WHERE 
-							t1.member_id = t.id 
-						AND 
-							t1.dir = 0
-					) resource_size
+					)  resources
 				FROM
 					t_member t
 				WHERE 1=1
@@ -141,15 +131,17 @@ func (m *MemberService) Create(ctx context.Context, request *api.MemberCreateReq
 	now := time.Now().UnixMilli()
 
 	return db.Session(ctx).Create(&model.Member{
-		Id:         id.Next().Int64(),
-		NickName:   request.NickName,
-		Avatar:     "", // TODO 随机头像
-		Account:    request.Account,
-		Password:   string(password),
-		Email:      request.Email,
-		Enabled:    request.Enabled,
-		CreateTime: now,
-		UpdateTime: now,
+		Id:               id.Next().Int64(),
+		NickName:         request.NickName,
+		Avatar:           "", // TODO 随机头像
+		Account:          request.Account,
+		Password:         string(password),
+		Email:            request.Email,
+		Enabled:          request.Enabled,
+		UsedStorageSpace: 0,
+		MaxStorageSpace:  request.MaxStorageSpace,
+		CreateTime:       now,
+		UpdateTime:       now,
 	}).Error
 }
 
@@ -201,6 +193,9 @@ func (m *MemberService) Update(ctx context.Context, request *api.MemberUpdateReq
 	}
 	if request.Avatar != "" {
 		updateMap["avatar"] = request.Avatar
+	}
+	if request.MaxStorageSpace != nil {
+		updateMap["max_storage_space"] = *request.MaxStorageSpace
 	}
 
 	if len(updateMap) == 0 {

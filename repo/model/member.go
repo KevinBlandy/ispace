@@ -2,17 +2,21 @@ package model
 
 // Member 会员
 type Member struct {
-	Id         int64 `gorm:"primaryKey"`
-	NickName   string
-	Avatar     string
-	Account    string `gorm:"uniqueIndex"`
-	Password   string
-	Email      string `gorm:"uniqueIndex"`
-	Enabled    bool
-	CreateTime int64
-	UpdateTime int64
+	Id               int64 `gorm:"primaryKey"`
+	NickName         string
+	Avatar           string
+	Account          string `gorm:"uniqueIndex"`
+	Password         string
+	Email            string `gorm:"uniqueIndex"`
+	Enabled          bool
+	UsedStorageSpace int64 // 已使用的存储空间
+	MaxStorageSpace  int64 // 最多可使用的空间
+
 	//DeleteTime int64 // 逻辑删除
 	//Version    int64 // 版本控制
+
+	CreateTime int64
+	UpdateTime int64
 }
 
 func (Member) TableName() string {

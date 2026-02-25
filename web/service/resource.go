@@ -1499,41 +1499,15 @@ func (s *ResourceService) Nested(resources []*model.Resource) ([]*model.Resource
 }
 
 // TotalSize 总计资源的逻辑总存储大小
-func (s *ResourceService) TotalSize(ctx context.Context, memberId int64) (uint64, error) {
-	var objectSize uint64
-	err := db.Session(ctx).Raw(`
-		SELECT
-			IFNULL(SUM(t1.size), 0) 
-		FROM
-			t_resource t
-			INNER JOIN t_object t1 ON t1.id = t.object_id
-		WHERE
-			t.member_id = ?
-		AND
-			t.dir = ?
-	`, memberId, false).Row().Scan(&objectSize)
-
-	if err != nil {
-		return 0, err
+func (s *ResourceService) TotalSize(ctx context.Context, memberId int64) (*api.MemberResourceStatResponse, error) {
+	m, err := gorm.G[model.Member](db.Session(ctx)).Select("used_storage_space", "max_storage_space").Where("id = ?", memberId).Take(ctx)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
 	}
-
-	// 回收站中的资源也要进行统计
-	var recycleBinSize uint64
-	err = db.Session(ctx).Raw(`
-		SELECT
-			IFNULL(SUM(t1.size), 0) 
-		FROM
-			t_recycle_bin t
-			INNER JOIN t_object t1 ON t1.id = t.resource_object_id
-		WHERE
-			t.member_id = ?
-		AND
-			t.resource_dir = ?
-	`, memberId, false).Row().Scan(&recycleBinSize)
-	if err != nil {
-		return 0, err
-	}
-	return objectSize + recycleBinSize, nil
+	return &api.MemberResourceStatResponse{
+		UsedStorageSpace: m.UsedStorageSpace,
+		MaxStorageSpace:  m.MaxStorageSpace,
+	}, nil
 }
 
 var DefaultResourceService = NewResourceService(DefaultObjectService,

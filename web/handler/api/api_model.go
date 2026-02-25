@@ -311,5 +311,6 @@ type ShareResourceDownloadRequest struct {
 
 // MemberResourceStatResponse 会员的资源统计
 type MemberResourceStatResponse struct {
-	Size uint64 `json:"size"` // 总资源大小
+	UsedStorageSpace int64 `json:"usedStorageSpace"` // 已使用的存储空间
+	MaxStorageSpace  int64 `json:"maxStorageSpace"`  // 最多可使用的空间
 }
