@@ -205,7 +205,6 @@ func (s *ResourceService) NewObjectRef(ctx context.Context, memberId, parentId, 
 		return err
 	}
 
-	// 更新引用
 	return s.objectService.UpdateRefCount(ctx, objectId, 1)
 }
 
@@ -255,6 +254,11 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	}
 	if strings.TrimSpace(fileHeader.Filename()) == "" {
 		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("文件名称不能为空"))
+	}
+
+	// 先累计空间使用量
+	if err := s.AddUsedStorageSpace(ctx, memberId, fileHeader.Size()); err != nil {
+		return err
 	}
 
 	file, err := fileHeader.Open()
@@ -348,7 +352,7 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 		Path:        newFilePath,
 		Compression: util.If(compress, model.ObjectCompressionGzip, model.ObjectCompressionNone),
 		Hash:        hash,
-		Size:        fileHeader.Size(),
+		Size:        fileHeader.Size(), // 逻辑大小
 		FileSize:    stat.Size(),
 		RefCount:    0,
 		ContentType: contentType,
@@ -360,7 +364,27 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 		return err
 	}
 
+	// 创建对象引用
 	return s.NewObjectRef(ctx, memberId, parentId, object.Id, fileHeader.Filename())
+}
+
+// AddUsedStorageSpace 累加会员的资源用量，如果超出最大限制则返回异常
+func (s *ResourceService) AddUsedStorageSpace(ctx context.Context, memberId int64, size int64) error {
+
+	result := db.Session(ctx).
+		Table(model.Member{}.TableName()).
+		Where("id = ? AND max_storage_space >= used_storage_space + ?", memberId, size).
+		UpdateColumns(map[string]any{
+			"used_storage_space": gorm.Expr("used_storage_space + ?", size),
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("可用存储空间不足"))
+	}
+	return nil
 }
 
 // MultipartPartResource Multipart 上传
@@ -953,13 +977,19 @@ func (s *ResourceService) uploadDir(ctx context.Context, memberId int64, parentI
 // FlashUpload 闪电传
 func (s *ResourceService) FlashUpload(ctx context.Context, request *api.ResourceFlashUploadRequest, memberId, parentId int64) error {
 	// 根据 hash 检索对象信息
-	object, err := gorm.G[model.Object](db.Session(ctx)).Select("id").Where("hash = ?", request.Hash).Take(ctx)
+	object, err := gorm.G[model.Object](db.Session(ctx)).Select("id", "size").Where("hash = ?", request.Hash).Take(ctx)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 	if object.Id < 1 {
 		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源不存在"))
 	}
+
+	// 先累计空间使用量
+	if err := s.AddUsedStorageSpace(ctx, memberId, object.Size); err != nil {
+		return err
+	}
+
 	// 创建新的资源
 	return s.NewObjectRef(ctx, memberId, parentId, object.Id, request.Title)
 }
