@@ -21,8 +21,8 @@ type AuthFilter struct {
 
 func NewAuthFilter(cookie, header string, ss *service.SessionService, optional bool) *AuthFilter {
 	return &AuthFilter{
-		header:         header,
 		cookie:         cookie,
+		header:         header,
 		sessionService: ss,
 		optional:       optional,
 	}
@@ -69,12 +69,12 @@ func (a *AuthFilter) Serve(c *gin.Context) (any, error) {
 }
 
 func NewManagerAuthFilter(optional bool) *AuthFilter {
-	return &AuthFilter{
+	return NewAuthFilter(
 		constant.HttpCookieManagerToken,
 		constant.HttpHeaderManagerToken,
 		service.DefaultManagerSessionService(),
 		optional,
-	}
+	)
 }
 
 // NewMemberAuthFilter 创建新的会员验证器，允许自定义 “可选” 状态

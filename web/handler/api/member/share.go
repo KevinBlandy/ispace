@@ -105,6 +105,7 @@ func (a ShareApi) ResourceList(g *gin.Context) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return response.Ok(result), nil
 }
 
@@ -120,6 +121,14 @@ func (a ShareApi) Share(g *gin.Context) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	//  累计访问次数
+	go func() {
+		_ = db.TransactionWithOutResult(context.Background(), func(ctx context.Context) error {
+			return a.service.IncrViews(ctx, ret.Id, 1)
+		})
+	}()
+
 	return response.Ok(ret), nil
 }
 
@@ -165,13 +174,6 @@ func (a ShareApi) Verify(g *gin.Context) (any, error) {
 		HttpOnly: true,
 		SameSite: http.SameSiteDefaultMode,
 	})
-
-	//  累计访问次数
-	go func() {
-		_ = db.TransactionWithOutResult(context.Background(), func(ctx context.Context) error {
-			return a.service.IncrViews(ctx, share.Id, 1)
-		})
-	}()
 
 	return response.Ok(nil), nil
 }

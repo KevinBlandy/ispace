@@ -90,7 +90,7 @@ func (s *SysConfigApi) Delete(g *gin.Context) (any, error) {
 }
 
 func NewSysConfigApi(service *service.SysConfigService) *SysConfigApi {
-	return &SysConfigApi{}
+	return &SysConfigApi{service: service}
 }
 
 var DefaultSysConfigApi = NewSysConfigApi(service.DefaultSysConfigService)

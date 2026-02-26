@@ -88,7 +88,7 @@ func (s *SysConfigService) ExistsByKey(ctx context.Context, key model.SysConfigK
 	Id  int64
 	Key model.SysConfigKey
 }, err error) {
-	err = db.Session(ctx).Raw("SELECT id, key FROM sys_config WHERE key = ?", key).Row().Scan(&ret.Id, &ret.Key)
+	err = db.Session(ctx).Raw("SELECT id, key FROM t_sys_config WHERE key = ?", key).Row().Scan(&ret.Id, &ret.Key)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			err = nil // 无记录，不作为异常

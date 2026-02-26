@@ -94,10 +94,10 @@ func (a *SessionService) Parse(ctx context.Context, signed string) (*Session, er
 	token, err := jwt.NewParser().ParseWithClaims(signed, &claims, func(token *jwt.Token) (interface{}, error) {
 		return []byte(a.sysConfigService.Get(ctx, model.SysConfigKeySessionSecret).Value), nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	if !token.Valid {
+	//if err != nil {
+	//	return nil, err
+	//}
+	if token == nil || !token.Valid {
 		return nil, common.NewServiceError(http.StatusUnauthorized, response.Fail(response.CodeUnauthorized).WithMessage("Invalid Token"))
 	}
 

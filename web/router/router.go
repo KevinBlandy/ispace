@@ -164,7 +164,6 @@ func New() http.Handler {
 	)
 
 	managerApi.Use(
-		MockAuthFilter(10000),
 		H(filter.NewManagerAuthFilter(false).Serve),
 	)
 
