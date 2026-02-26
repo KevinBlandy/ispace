@@ -377,6 +377,37 @@ func (s RecycleBinService) GetObject(ctx context.Context, memberId int64, id int
 	return
 }
 
+// Clean 清理过期的回收站内容
+func (s RecycleBinService) Clean(ctx context.Context) (int64, error) {
+	t := time.Now().AddDate(0, 0, -30).UnixMilli() // 小于30 天前的都删除
+	session := db.Session(ctx)
+
+	rows, err := session.
+		Raw("SELECT id, root, resource_id, resource_object_id, resource_dir, member_id FROM t_recycle_bin WHERE create_time <= ?  AND root = ?", t, true).
+		Rows()
+
+	if err != nil {
+		return 0, err
+	}
+	defer util.SafeClose(rows)
+
+	var total int64
+
+	for rows.Next() {
+		var m model.RecycleBin
+		if err := session.ScanRows(rows, &m); err != nil {
+			return total, err
+		}
+		// 删除
+		if err := s.Remove(ctx, &m); err != nil {
+			return total, err
+		}
+		total += 1
+	}
+
+	return total, nil
+}
+
 var DefaultRecycleBinService = &RecycleBinService{
 	memberService:   DefaultMemberService,
 	objectService:   DefaultObjectService,

@@ -158,11 +158,6 @@ func (o *ObjectService) InvalidClean(ctx context.Context) error {
 	bucket := store.DefaultStore()
 	err := fs.WalkDir(bucket.FS(), ".", func(f string, d fs.DirEntry, err error) error {
 
-		// 忽略文件夹
-		if d.IsDir() {
-			return nil
-		}
-
 		// 文件信息
 		stat, err := d.Info()
 		if err != nil {
@@ -171,6 +166,12 @@ func (o *ObjectService) InvalidClean(ctx context.Context) error {
 
 		// 文件最后修改时间为 7 天前
 		if stat.ModTime().After(weekAgo) {
+			return nil
+		}
+
+		// 忽略文件夹
+		if d.IsDir() {
+			// TODO 如果是空目录，则直接删除
 			return nil
 		}
 

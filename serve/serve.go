@@ -8,6 +8,7 @@ import (
 	"ispace/db"
 	"ispace/log"
 	"ispace/rdb"
+	"ispace/task"
 	"ispace/web/server"
 	"log/slog"
 	"net/http"
@@ -19,7 +20,6 @@ import (
 	_ "ispace/config"
 
 	"github.com/gin-gonic/gin"
-	"github.com/robfig/cron/v3"
 )
 
 func Serve() {
@@ -44,21 +44,10 @@ func Serve() {
 	// ===================================
 	// 定时任务调度
 	// ===================================
-
-	scheduler := cron.New(
-		cron.WithSeconds(), // 解析秒
-		cron.WithChain(cron.SkipIfStillRunning(cron.DiscardLogger)), // 当前任务执行时间超过了间隔时间，当前任务执行完毕后，等待间隔时间后，执行下次任务。
-	)
-
-	//// 每小时执行一次失效文件清理
-	//if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewInvalidObjectCleaner(service.DefaultObjectService)); err != nil {
-	//	slog.Error("Schedule 调度任务初始化异常",
-	//		slog.String("err", err.Error()),
-	//	)
-	//	return
-	//}
-
-	scheduler.Start()
+	taskStop, err := task.Initialization()
+	if err != nil {
+		return
+	}
 
 	// ===================================
 	// HTTP 服务
@@ -89,12 +78,10 @@ func Serve() {
 		return
 	}
 
-	ctx := scheduler.Stop()
+	taskStop()
 
 	_ = db.Close()
 	_ = rdb.Close()
-
-	<-ctx.Done()
 
 	slog.Info("服务已停止")
 }
