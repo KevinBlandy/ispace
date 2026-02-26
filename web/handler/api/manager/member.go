@@ -30,6 +30,9 @@ func (m *MemberApi) List(g *gin.Context) (any, error) {
 	request.Account = g.Query("account")
 	request.Email = g.Query("email")
 
+	// 排序
+	request.Pager.Sort = []page.Sort{{Field: "create_time", Order: "DESC"}}
+
 	result, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*page.Pagination[*api.MemberListResponse], error) {
 		return m.memberService.List(ctx, request)
 	}, db.TxReadOnly)
@@ -89,4 +92,4 @@ func (m *MemberApi) Delete(g *gin.Context) (any, error) {
 	return response.Ok(nil), nil
 }
 
-var DefaultMemberApi = NewMemberApi(service.NewMemberService(service.DefaultResourceService))
+var DefaultMemberApi = NewMemberApi(service.DefaultMemberService)

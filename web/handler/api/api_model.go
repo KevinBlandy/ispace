@@ -295,6 +295,7 @@ type ShareResourceListResponse struct {
 type ShareResponse struct {
 	Id     int64  `json:"id,string"` // 唯一 id
 	Path   string `json:"path"`      // 唯一path
+	Views  int64  `json:"views"`     // 访问次数
 	Member struct {
 		Id       int64  `json:"id,string"` // 会员 Id
 		NickName string `json:"nickName"`  // 会员昵称

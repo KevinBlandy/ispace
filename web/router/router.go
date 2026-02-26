@@ -157,14 +157,26 @@ func New() http.Handler {
 	// ======================================================================
 	managerApi := router.Group("/manager-api")
 
+	// 登陆
 	managerApi.POST("/sign-in",
 		H(handler.DefaultCaptcha().Validate),
 		H(manager.DefaultSignInApi.SignIn),
 	)
 
 	managerApi.Use(
+		MockAuthFilter(10000),
 		H(filter.NewManagerAuthFilter(false).Serve),
 	)
+
+	// 登出
+	{
+		managerApi.POST("/sign-out", H(manager.DefaultSignInApi.SignOut))
+	}
+
+	// 仪表盘
+	{
+		managerApi.GET("/dashboard/stat", H(manager.DefaultDashboardApi.Stat))
+	}
 
 	// 会员管理
 	{
@@ -176,8 +188,8 @@ func New() http.Handler {
 
 	// 资源管理
 	{
-		managerApi.GET("/objects/stat", H(manager.DefaultObjectApi.Stat))    // 资源统计
 		managerApi.GET("/objects", H(manager.DefaultObjectApi.List))         // 资源列表
+		managerApi.GET("/objects/:id", H(manager.DefaultObjectApi.Content))  // 读取资源
 		managerApi.PATCH("/objects/:id", H(manager.DefaultObjectApi.Update)) // 更新资源
 		managerApi.DELETE("/objects", H(manager.DefaultObjectApi.Delete))    // 删除资源
 	}
@@ -189,9 +201,12 @@ func New() http.Handler {
 		managerApi.POST("/account/password", H(manager.DefaultAccountSettingApi.UpdatePassword)) // 修改账户的密码
 	}
 
-	// TODO 系统配置
+	//  系统配置
 	{
 		managerApi.GET("/sys-configs", H(manager.DefaultSysConfigApi.List))
+		memberApi.POST("/sys-configs", H(manager.DefaultSysConfigApi.Create))
+		managerApi.PUT("/sys-configs/:id", H(manager.DefaultSysConfigApi.Update))
+		managerApi.DELETE("/sys-configs", H(manager.DefaultSysConfigApi.Delete))
 	}
 
 	// 静态资源在最后

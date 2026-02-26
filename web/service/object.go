@@ -22,10 +22,12 @@ import (
 	"gorm.io/gorm"
 )
 
-type ObjectService struct{}
+type ObjectService struct {
+	memberService *MemberService
+}
 
-func NewObjectService() *ObjectService {
-	return &ObjectService{}
+func NewObjectService(service *MemberService) *ObjectService {
+	return &ObjectService{service}
 }
 
 // List 分页检索数据
@@ -89,31 +91,61 @@ func (o *ObjectService) Delete(ctx context.Context, request *api.ObjectDeleteReq
 
 // deleteById 根据 id 删除记录
 func (o *ObjectService) deleteById(ctx context.Context, id int64) error {
-	rowAffected, err := gorm.G[model.Object](db.Session(ctx)).Where("id = ?", id).Delete(ctx)
-	if err != nil {
+
+	session := db.Session(ctx)
+
+	obj, err := gorm.G[model.Object](session).Select("id", "size").Where("id = ?", id).Take(ctx)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
-	if rowAffected != 1 {
+	if obj.Id == 0 {
 		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源不存在"))
 	}
 
-	// 删除资源数据
-	_, err = gorm.G[model.Resource](db.Session(ctx)).Where("object_id = ?", id).Delete(ctx)
-	if err != nil {
-		return err
-	}
 	// 删除回收站数据
-	_, err = gorm.G[model.RecycleBin](db.Session(ctx)).Where("recource_object_id = ?", id).Delete(ctx)
+	_, err = gorm.G[model.RecycleBin](session).Where("recource_object_id = ?", obj.Id).Delete(ctx)
 	if err != nil {
 		return err
 	}
 
 	// 删除分享数据
-	_, err = gorm.G[model.ShareResource](db.Session(ctx)).Where("recource_object_id = ?", id).Delete(ctx)
+	_, err = gorm.G[model.ShareResource](session).Where("recource_object_id = ?", obj.Id).Delete(ctx)
 
-	// TODO 修改统计数据
+	// 删除资源数据
+	rows, err := session.Raw("SELECT id, member_id FROM t_resource WHERE object_id = ?", obj.Id).Rows()
+	if err != nil {
+		return err
+	}
+	defer util.SafeClose(rows)
 
-	return err
+	for rows.Next() {
+		var resourceId, memberId int64
+		if err := rows.Scan(&resourceId, &memberId); err != nil {
+			return err
+		}
+		// 更新会员的空间占用
+		if err := o.memberService.AddUsedStorageSpace(ctx, memberId, -obj.Size); err != nil {
+			return err
+		}
+		// 删除记录
+		affected, err := gorm.G[model.Resource](session).Where("id = ?", resourceId).Delete(ctx)
+		if err != nil {
+			return err
+		}
+		if affected == 0 {
+			return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源删除失败"))
+		}
+	}
+
+	// 删除对象
+	affected, err := gorm.G[model.Object](session).Where("id = ?", id).Delete(ctx)
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("对象删除失败"))
+	}
+	return nil
 }
 
 // InvalidClean 清理无效的存储对象
@@ -196,57 +228,11 @@ func (o *ObjectService) UpdateRefCount(ctx context.Context, id int64, count int6
 	return nil
 }
 
-// Stat 资源统计
-func (o *ObjectService) Stat(ctx context.Context) (*api.ObjectStatResponse, error) {
-
-	var ret = &api.ObjectStatResponse{}
-
-	session := db.Session(ctx)
-
-	// 总统计
-	if err := session.Raw("SELECT IFNULL(SUM(size), 0), IFNULL(SUM(file_size), 0), COUNT(id) FROM t_object").
-		Row().
-		Scan(&ret.Size, &ret.FileSize, &ret.Total); err != nil {
-		return nil, err
+func (o *ObjectService) GetById(ctx context.Context, id int64, columns ...string) (*model.Object, error) {
+	if len(columns) == 0 {
+		return gorm.G[*model.Object](db.Session(ctx)).Where("id = ?", id).Take(ctx)
 	}
-
-	// 上下文中的时区信息
-	now := util.ContextValue[time.Time](ctx, constant.CtxKeyRequestTime)
-	timeZone := util.ContextValue[*time.Location](ctx, constant.CtxKeyTimezone)
-
-	// 当前时间在客户端的时区
-	now = now.In(timeZone)
-
-	// 统计最近30天的数据
-	// TODO 替换为 group
-	for i := range 30 {
-
-		day := now.AddDate(0, 0, -i)
-
-		var dailyStat = api.ObjectDailyStat{
-			Date: day.Format(time.DateOnly),
-		}
-
-		// 此日开始和结束
-		dayStart := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, day.Location()).UnixMilli()
-		dayEnd := time.Date(day.Year(), day.Month(), day.Day(), 23, 59, 59, 999999999, day.Location()).UnixMilli()
-
-		// 此日的统计
-		err := session.
-			Raw("SELECT IFNULL(SUM(size), 0), IFNULL(SUM(file_size), 0), COUNT(id) FROM t_object WHERE create_time BETWEEN ? AND ?",
-				dayStart, dayEnd,
-			).
-			Row().
-			Scan(&dailyStat.Size, &dailyStat.FileSize, &dailyStat.Total)
-		if err != nil {
-			return nil, err
-		}
-		ret.Daily = append(ret.Daily, &dailyStat)
-	}
-
-	// slices.Reverse(ret.Daily)
-
-	return ret, nil
+	return gorm.G[*model.Object](db.Session(ctx)).Select(columns[0], columns[1:]).Where("id = ?", id).Take(ctx)
 }
 
-var DefaultObjectService = NewObjectService()
+var DefaultObjectService = NewObjectService(DefaultMemberService)

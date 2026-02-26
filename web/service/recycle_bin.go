@@ -22,6 +22,7 @@ import (
 
 type RecycleBinService struct {
 	objectService   *ObjectService
+	memberService   *MemberService
 	resourceService *ResourceService
 }
 
@@ -154,7 +155,7 @@ func (s RecycleBinService) delete(ctx context.Context, m *model.RecycleBin) erro
 	if err := session.Raw("SELECT size FROM t_object where id = ?", m.ResourceObjectId).Row().Scan(&size); err != nil {
 		return err
 	}
-	if err := s.resourceService.AddUsedStorageSpace(ctx, m.MemberId, -size); err != nil {
+	if err := s.memberService.AddUsedStorageSpace(ctx, m.MemberId, -size); err != nil {
 		return err
 	}
 	// 递减对应的引用计数
@@ -377,6 +378,7 @@ func (s RecycleBinService) GetObject(ctx context.Context, memberId int64, id int
 }
 
 var DefaultRecycleBinService = &RecycleBinService{
+	memberService:   DefaultMemberService,
 	objectService:   DefaultObjectService,
 	resourceService: DefaultResourceService,
 }

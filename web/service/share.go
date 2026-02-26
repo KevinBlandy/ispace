@@ -172,7 +172,7 @@ WHERE
 
 // Share 分享资源的详情
 func (s ShareService) Share(ctx context.Context, identifier types.Identifier) (*api.ShareResponse, error) {
-	share, err := s.GetByIdentifier(ctx, identifier, "id", "path", "create_time", "enabled", "member_id")
+	share, err := s.GetByIdentifier(ctx, identifier, "id", "path", "create_time", "enabled", "member_id", "views")
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
@@ -192,8 +192,9 @@ func (s ShareService) Share(ctx context.Context, identifier types.Identifier) (*
 		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("会员信息异常"))
 	}
 	return &api.ShareResponse{
-		Id:   share.Id,
-		Path: share.Path,
+		Id:    share.Id,
+		Path:  share.Path,
+		Views: share.Views,
 		Member: struct {
 			Id       int64  `json:"id,string"`
 			NickName string `json:"nickName"`
@@ -404,6 +405,24 @@ func (s ShareService) Download(ctx context.Context, request *api.ShareResourceDo
 	waitGroup.Wait()
 
 	return resources, nil
+}
+
+// IncrViews 递增访问次数
+func (s ShareService) IncrViews(ctx context.Context, id int64, views int) error {
+
+	result := db.Session(ctx).Table(model.Share{}.TableName()).
+		Where("id = ?", id).
+		UpdateColumns(map[string]any{
+			"views": gorm.Expr("views + ?", views),
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("更新失败"))
+	}
+	return nil
 }
 
 func NewShareService() *ShareService {

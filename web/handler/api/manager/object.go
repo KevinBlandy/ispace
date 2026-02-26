@@ -2,16 +2,21 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"ispace/common"
 	"ispace/common/page"
 	"ispace/common/response"
 	"ispace/db"
+	"ispace/repo/model"
+	"ispace/store"
 	"ispace/web/handler/api"
 	"ispace/web/service"
 	"net/http"
+	"path"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type ObjectApi struct {
@@ -27,6 +32,10 @@ func (o *ObjectApi) List(c *gin.Context) (any, error) {
 	var request = new(api.ObjectListRequest)
 	request.Status = c.Query("status")
 	request.Pager = page.NewPagerFromQuery(c.Request.URL.Query())
+
+	// 排序
+	request.Pager.Sort = []page.Sort{{Field: "create_time", Order: "DESC"}}
+
 	result, err := db.Transaction(c.Request.Context(), func(ctx context.Context) (*page.Pagination[*api.ObjectListResponse], error) {
 		return o.objectService.List(ctx, request)
 	}, db.TxReadOnly)
@@ -69,14 +78,34 @@ func (o *ObjectApi) Delete(g *gin.Context) (any, error) {
 	return response.Ok(nil), nil
 }
 
-func (o *ObjectApi) Stat(g *gin.Context) (any, error) {
-	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*api.ObjectStatResponse, error) {
-		return o.objectService.Stat(ctx)
+func (o *ObjectApi) Content(g *gin.Context) (any, error) {
+	objectId, _ := strconv.ParseInt(g.Param("id"), 10, 64)
+	if objectId < 1 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithCode("非法请求"))
+	}
+
+	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*model.Object, error) {
+		return o.objectService.GetById(ctx, objectId, "id", "compression", "content_type", "path")
 	}, db.TxReadOnly)
+
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if ret.Id == 0 {
+		return nil, common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithCode("对象不存在"))
+	}
+
+	err = store.DefaultStore().ServeContent(g.Writer, g.Request, &store.File{
+		Title:       path.Base(ret.Path),
+		Compression: ret.Compression,
+		ContentType: ret.ContentType,
+		Path:        ret.Path,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return response.Ok(ret), nil
+	g.Abort()
+	return nil, nil
 }
 
-var DefaultObjectApi = NewObjectApi(service.NewObjectService())
+var DefaultObjectApi = NewObjectApi(service.DefaultObjectService)

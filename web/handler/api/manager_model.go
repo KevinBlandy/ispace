@@ -119,8 +119,43 @@ type AdminProfileUpdateRequest struct {
 	Avatar   string `json:"avatar"`
 }
 
-// ObjectStatResponse 资源统计
-type ObjectStatResponse struct {
+// SysConfigListResponse 系统配置
+type SysConfigListResponse struct {
+	Id         int64                    `json:"id,string"`
+	Key        model.SysConfigKey       `json:"key"`               // 配置 Key
+	Value      string                   `json:"value"`             // 配置 Value
+	ValueType  model.SysConfigValueType `json:"valueType"`         // 配置值类型
+	Remark     string                   `json:"remark"`            // 备注
+	CreateTime int64                    `json:"createTime,string"` // 创建时间
+	UpdateTime int64                    `json:"updateTime,string"` // 更新时间
+}
+
+type SysConfigCreateRequest struct {
+	Key       model.SysConfigKey       `json:"key"`       // 配置 Key
+	Value     string                   `json:"value"`     // 配置 Value
+	ValueType model.SysConfigValueType `json:"valueType"` // 配置值类型
+	Remark    string                   `json:"remark"`    // 备注
+}
+
+type SysConfigUpdateRequest struct {
+	Id        int64                    `json:"-"`
+	Key       model.SysConfigKey       `json:"key"`       // 配置 Key
+	Value     string                   `json:"value"`     // 配置 Value
+	ValueType model.SysConfigValueType `json:"valueType"` // 配置值类型
+	Remark    string                   `json:"remark"`    // 备注
+}
+
+type SysConfigDeleteRequest struct {
+	Id types.Int64Slice `json:"id"`
+}
+
+type DashboardStatResponse struct {
+	Object *DashboardObjectStat `json:"object"` // 对象统计数据
+	Member *DashboardMemberStat `json:"member"` // 会员统计数据
+}
+
+// DashboardObjectStat 资源统计
+type DashboardObjectStat struct {
 	Total    int64              `json:"total"`    // 总资源文件数量
 	Size     uint64             `json:"size"`     // 总资源逻辑大小
 	FileSize int64              `json:"fileSize"` // 实际占用空间大小
@@ -135,13 +170,12 @@ type ObjectDailyStat struct {
 	FileSize uint64 `json:"fileSize"` // 实际文件大小
 }
 
-// SysConfigListResponse 系统配置
-type SysConfigListResponse struct {
-	Id         int64                    `json:"id,string"`
-	Key        model.SysConfigKey       `json:"key"`               // 配置 Key
-	Value      string                   `json:"value"`             // 配置 Value
-	ValueType  model.SysConfigValueType `json:"valueType"`         // 配置值类型
-	Remark     string                   `json:"remark"`            // 备注
-	CreateTime int64                    `json:"createTime,string"` // 创建时间
-	UpdateTime int64                    `json:"updateTime,string"` // 更新时间
+type DashboardMemberStat struct {
+	Total int64              `json:"total"` // 总会员数量
+	Daily []*MemberDailyStat `json:"daily"` // 每日统计
+}
+
+type MemberDailyStat struct {
+	Date  string `json:"date"`  // 日期
+	Total uint64 `json:"total"` // 新增会员数量
 }

@@ -43,13 +43,15 @@ const sniffLen = 512
 
 type ResourceService struct {
 	objectService        *ObjectService
+	memberService        *MemberService
 	compressionThreshold int64    // 压缩阈值
 	unCompressionType    []string // 不进行压缩的媒体类型
 }
 
-func NewResourceService(service *ObjectService, compressionThreshold int64, unCompressionType []string) *ResourceService {
+func NewResourceService(objectService *ObjectService, memberService *MemberService, compressionThreshold int64, unCompressionType []string) *ResourceService {
 	return &ResourceService{
-		objectService:        service,
+		objectService:        objectService,
+		memberService:        memberService,
 		compressionThreshold: compressionThreshold,
 		unCompressionType:    unCompressionType,
 	}
@@ -257,7 +259,7 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	}
 
 	// 先累计空间使用量
-	if err := s.AddUsedStorageSpace(ctx, memberId, fileHeader.Size()); err != nil {
+	if err := s.memberService.AddUsedStorageSpace(ctx, memberId, fileHeader.Size()); err != nil {
 		return err
 	}
 
@@ -368,37 +370,37 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 	return s.NewObjectRef(ctx, memberId, parentId, object.Id, fileHeader.Filename())
 }
 
-// AddUsedStorageSpace 累加会员的资源用量，如果超出最大限制则返回异常
-func (s *ResourceService) AddUsedStorageSpace(ctx context.Context, memberId int64, size int64) error {
-
-	if size == 0 {
-		return nil
-	}
-
-	var where = "id = ? "
-	var params = []any{memberId}
-
-	if size > 0 {
-		// 累加的时候，要注意不能超出用户最大的限制
-		where += " AND max_storage_space >= used_storage_space + ?"
-		params = append(params, size)
-	}
-
-	result := db.Session(ctx).
-		Table(model.Member{}.TableName()).
-		Where(where, params...).
-		UpdateColumns(map[string]any{
-			"used_storage_space": gorm.Expr("used_storage_space + ?", size),
-		})
-
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("可用存储空间不足"))
-	}
-	return nil
-}
+//// AddUsedStorageSpace 累加会员的资源用量，如果超出最大限制则返回异常
+//func (s *ResourceService) AddUsedStorageSpace(ctx context.Context, memberId int64, size int64) error {
+//
+//	if size == 0 {
+//		return nil
+//	}
+//
+//	var where = "id = ? "
+//	var params = []any{memberId}
+//
+//	if size > 0 {
+//		// 累加的时候，要注意不能超出用户最大的限制
+//		where += " AND max_storage_space >= used_storage_space + ?"
+//		params = append(params, size)
+//	}
+//
+//	result := db.Session(ctx).
+//		Table(model.Member{}.TableName()).
+//		Where(where, params...).
+//		UpdateColumns(map[string]any{
+//			"used_storage_space": gorm.Expr("used_storage_space + ?", size),
+//		})
+//
+//	if result.Error != nil {
+//		return result.Error
+//	}
+//	if result.RowsAffected == 0 {
+//		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("可用存储空间不足"))
+//	}
+//	return nil
+//}
 
 // MultipartPartResource Multipart 上传
 type MultipartPartResource struct {
@@ -999,7 +1001,7 @@ func (s *ResourceService) FlashUpload(ctx context.Context, request *api.Resource
 	}
 
 	// 先累计空间使用量
-	if err := s.AddUsedStorageSpace(ctx, memberId, object.Size); err != nil {
+	if err := s.memberService.AddUsedStorageSpace(ctx, memberId, object.Size); err != nil {
 		return err
 	}
 
@@ -1553,7 +1555,9 @@ func (s *ResourceService) TotalSize(ctx context.Context, memberId int64) (*api.M
 	}, nil
 }
 
-var DefaultResourceService = NewResourceService(DefaultObjectService,
+var DefaultResourceService = NewResourceService(
+	DefaultObjectService,
+	DefaultMemberService,
 	int64(types.KB),
 	[]string{
 		"video/",           // 视频，Range 支持

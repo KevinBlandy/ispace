@@ -65,6 +65,6 @@ func (s *SysConfig) JsonValue(dest any) (err error) {
 	return json.Unmarshal([]byte(s.Value), dest)
 }
 
-func (s *SysConfig) TableName() string {
+func (s SysConfig) TableName() string {
 	return "t_sys_config"
 }

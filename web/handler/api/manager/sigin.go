@@ -49,6 +49,22 @@ func (a *SignInApi) SignIn(ctx *gin.Context) (any, error) {
 	return response.Ok(nil), nil
 }
 
+// SignOut 登出
+func (a *SignInApi) SignOut(g *gin.Context) (any, error) {
+	err := service.DefaultManagerSessionService().Invalid(g.MustGet(constant.CtxKeySession).(*service.Session))
+	if err != nil {
+		return nil, err
+	}
+	g.SetCookieData(&http.Cookie{
+		Name:     constant.HttpCookieManagerToken,
+		Path:     "/",
+		MaxAge:   -1, // 立即删除
+		HttpOnly: true,
+		SameSite: http.SameSiteDefaultMode,
+	})
+	return response.Ok(nil), nil
+}
+
 func NewSignInApi(adminService *service.AdminService) *SignInApi {
 	return &SignInApi{adminService: adminService}
 }

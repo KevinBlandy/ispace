@@ -166,6 +166,13 @@ func (a ShareApi) Verify(g *gin.Context) (any, error) {
 		SameSite: http.SameSiteDefaultMode,
 	})
 
+	//  累计访问次数
+	go func() {
+		_ = db.TransactionWithOutResult(context.Background(), func(ctx context.Context) error {
+			return a.service.IncrViews(ctx, share.Id, 1)
+		})
+	}()
+
 	return response.Ok(nil), nil
 }
 

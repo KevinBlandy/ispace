@@ -21,11 +21,10 @@ import (
 )
 
 type MemberService struct {
-	resourceService *ResourceService
 }
 
-func NewMemberService(resourceService *ResourceService) *MemberService {
-	return &MemberService{resourceService: resourceService}
+func NewMemberService() *MemberService {
+	return &MemberService{}
 }
 
 // Login 登录
@@ -320,4 +319,36 @@ func (m *MemberService) UpdateProfile(ctx context.Context, request *api.MemberPr
 	})
 }
 
-var DefaultMemberService = NewMemberService(DefaultResourceService)
+// AddUsedStorageSpace 累加会员的资源用量，如果超出最大限制则返回异常
+func (m *MemberService) AddUsedStorageSpace(ctx context.Context, memberId int64, size int64) error {
+
+	if size == 0 {
+		return nil
+	}
+
+	var where = "id = ? "
+	var params = []any{memberId}
+
+	if size > 0 {
+		// 累加的时候，要注意不能超出用户最大的限制
+		where += " AND max_storage_space >= used_storage_space + ?"
+		params = append(params, size)
+	}
+
+	result := db.Session(ctx).
+		Table(model.Member{}.TableName()).
+		Where(where, params...).
+		UpdateColumns(map[string]any{
+			"used_storage_space": gorm.Expr("used_storage_space + ?", size),
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("可用存储空间不足"))
+	}
+	return nil
+}
+
+var DefaultMemberService = NewMemberService()
