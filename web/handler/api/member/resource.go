@@ -17,6 +17,7 @@ import (
 	"ispace/store"
 	"ispace/web/handler/api"
 	"ispace/web/service"
+	"log/slog"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -495,6 +496,8 @@ func (r ResourceApi) UploadGet(g *gin.Context) (any, error) {
 		}()
 		defer util.SafeClose(tmpFile)
 
+		slog.InfoContext(g.Request.Context(), "下载远程资源", slog.String("temp", tmpFile.Name()))
+
 		// 请求资源
 		client := &http.Client{}
 		req, err := http.NewRequest(http.MethodGet, objectUrl.String(), nil)
@@ -551,6 +554,8 @@ func (r ResourceApi) UploadGet(g *gin.Context) (any, error) {
 			return
 		}
 
+		slog.InfoContext(g.Request.Context(), "远程资源下载完毕", slog.Int64("size", stat.Size()))
+
 		// 解析出文件名称
 		fileName := path.Base(objectUrl.Path)
 		if fileName == "." || fileName == "/" {
@@ -558,6 +563,12 @@ func (r ResourceApi) UploadGet(g *gin.Context) (any, error) {
 			objectUrl.RawQuery = ""
 			objectUrl.Fragment = ""
 			fileName = url.QueryEscape(objectUrl.String())
+		}
+
+		// 重置指针，后续需要读取以计算 hash
+		if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+			push(sse.Event{Event: "error", Data: err.Error()})
+			return
 		}
 
 		err = db.TransactionWithOutResult(context.Background(), func(ctx context.Context) error {

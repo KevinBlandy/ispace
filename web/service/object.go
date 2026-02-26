@@ -103,13 +103,13 @@ func (o *ObjectService) deleteById(ctx context.Context, id int64) error {
 	}
 
 	// 删除回收站数据
-	_, err = gorm.G[model.RecycleBin](session).Where("recource_object_id = ?", obj.Id).Delete(ctx)
+	_, err = gorm.G[model.RecycleBin](session).Where("resource_object_id = ?", obj.Id).Delete(ctx)
 	if err != nil {
 		return err
 	}
 
 	// 删除分享数据
-	_, err = gorm.G[model.ShareResource](session).Where("recource_object_id = ?", obj.Id).Delete(ctx)
+	_, err = gorm.G[model.ShareResource](session).Where("resource_object_id = ?", obj.Id).Delete(ctx)
 
 	// 删除资源数据
 	rows, err := session.Raw("SELECT id, member_id FROM t_resource WHERE object_id = ?", obj.Id).Rows()
