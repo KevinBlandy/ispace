@@ -23,7 +23,7 @@ func Initialization() (func(), error) {
 	if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewRecycleBinCleaner(service.DefaultRecycleBinService)); err != nil {
 		return func() {}, nil
 	}
-	//  每分钟执行一次分享过期文件清理
+	//  每分钟执行一次过期分享清理
 	if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewShareCleaner(service.DefaultShareService)); err != nil {
 		return func() {}, nil
 	}
