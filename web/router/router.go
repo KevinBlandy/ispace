@@ -146,7 +146,7 @@ func New() http.Handler {
 			service.DefaultShareService,
 		).Serve)
 
-		shareApi.POST("/share/:path/verify", H(member.DefaultShareApi.Verify))                                                                                                        // 密码校验
+		shareApi.POST("/share/:path/verify" /* TODO 验证码加持 */, H(member.DefaultShareApi.Verify))                                                                                       // 密码校验
 		shareApi.GET("/share/:path", optionalMemberAuthFilter, optionalMemberStatusFilter, shareAuthFilter, H(member.DefaultShareApi.Share))                                          // 资源信息
 		shareApi.GET("/share/:path/resources", optionalMemberAuthFilter, optionalMemberStatusFilter, shareAuthFilter, H(member.DefaultShareApi.ResourceList))                         // 资源列表
 		shareApi.Match([]string{http.MethodGet, http.MethodHead}, "/share/:path/resources/:resourceId", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.Content)) // 读取文件内容
