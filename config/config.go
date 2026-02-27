@@ -80,5 +80,12 @@ func Initialization(args []string) error {
 	RedisPoolMaxLifetime = flagSet.Duration("redis.pool.max-life-time", time.Minute*5, "Redis 连接最大存活时间")
 	RedisPoolTimeout = flagSet.Duration("redis.pool.timeout", time.Second*5, "Redis 获取连接超时时间")
 
-	return flagSet.Parse(args)
+	err := flagSet.Parse(args)
+	if err != nil {
+		return err
+	}
+
+	// TODO 尝试初始化 DB 文件和公共资源目录
+
+	return nil
 }

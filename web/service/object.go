@@ -47,6 +47,7 @@ func (o *ObjectService) List(ctx context.Context, request *api.ObjectListRequest
 // Exists 根据 column = value 判断记录是否存在
 // 如果 id = 0，则表示记录不存在
 func (o *ObjectService) Exists(ctx context.Context, column string, value any) (id int64, err error) {
+	// TODO FOR UPDATE
 	err = db.Session(ctx).Table(model.Object{}.TableName()).Select("id").Where(column+" = ?", value).Scan(&id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return 0, nil
@@ -94,6 +95,7 @@ func (o *ObjectService) deleteById(ctx context.Context, id int64) error {
 
 	session := db.Session(ctx)
 
+	// TODO FOR UPDATE
 	obj, err := gorm.G[model.Object](session).Select("id", "size").Where("id = ?", id).Take(ctx)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
@@ -186,6 +188,7 @@ func (o *ObjectService) InvalidClean(ctx context.Context) error {
 		// 检索文件是否存在
 		objectId, err := db.Transaction(ctx, func(ctx context.Context) (int64, error) {
 			var objectId int64
+			// TODO FOR UPDATE
 			return objectId, db.Session(ctx).Raw("SELECT id FROM t_object WHERE path = ?", localFilePath).Scan(&objectId).Error
 		})
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {

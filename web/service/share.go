@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -423,6 +424,38 @@ func (s ShareService) IncrViews(ctx context.Context, id int64, views int) error 
 		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("更新失败"))
 	}
 	return nil
+}
+
+// Clean 清理过期的分享记录
+func (s ShareService) Clean(ctx context.Context) (int64, error) {
+	var counter int64
+
+	now := time.Now().UnixMilli()
+
+	rows, err := db.Session(ctx).Raw("SELECT id, member_id FROM t_share WHERE expire_time > 0 AND expire_time < ?", now).Rows()
+	if err != nil {
+		return counter, err
+	}
+	defer util.SafeClose(rows)
+
+	for rows.Next() {
+		var shareId, memberId int64
+		if err := rows.Scan(&shareId, &memberId); err != nil {
+			return counter, err
+		}
+		// 删除
+		err := s.Delete(ctx, &api.ShareDeleteRequest{
+			MemberId: memberId,
+			Id:       types.Int64Slice{shareId},
+		})
+		if err != nil {
+			return counter, err
+		}
+
+		counter++
+	}
+
+	return counter, nil
 }
 
 func NewShareService() *ShareService {

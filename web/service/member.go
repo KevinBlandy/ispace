@@ -351,4 +351,14 @@ func (m *MemberService) AddUsedStorageSpace(ctx context.Context, memberId int64,
 	return nil
 }
 
+func (m *MemberService) GetMemberById(ctx context.Context, memberId int64, columns ...string) (*model.Member, error) {
+	//db.Session(ctx).Table(model.Member{}.TableName()).
+	if len(columns) == 0 {
+		return gorm.G[*model.Member](db.Session(ctx)).Where("id = ?", memberId).Take(ctx)
+	}
+	return gorm.G[*model.Member](db.Session(ctx)).
+		Select(columns[0], columns[1:]).
+		Where("id = ?", memberId).Take(ctx)
+}
+
 var DefaultMemberService = NewMemberService()

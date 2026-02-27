@@ -40,19 +40,34 @@ func (s *ShareAuthFilter) Serve(g *gin.Context) (any, error) {
 	// 资源路径
 	shareId := types.Identifier(g.Param(s.pathName))
 	if shareId == "" {
-		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源路径不存在"))
+		return nil, common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("资源不存在"))
 	}
 
 	// 查询资源信息
 	share, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*model.Share, error) {
-		return s.service.GetByIdentifier(ctx, shareId, "id", "member_id", "password", "path")
+		return s.service.GetByIdentifier(ctx, shareId, "id", "member_id", "password", "path", "enabled", "expire_time")
 	}, db.TxReadOnly)
 
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
+
+	// 不存在的资源路径
 	if share == nil || share.Id < 1 {
-		return nil, nil // 不存在的资源路径，由业务处理
+		return nil, common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("资源不存在"))
+	}
+
+	// 状态检查
+	if !share.Enabled {
+		return nil, common.NewServiceError(http.StatusForbidden, response.Fail(response.CodeForbidden).WithMessage("资源被屏蔽"))
+	}
+
+	now := time.Now().UnixMilli()
+
+	//util.ContextValueDefault(g.Request.Context(), constant.CtxKeyRequestTime, time.Now())
+	// 已经过期了
+	if share.ExpireTime > 0 && share.ExpireTime < now {
+		return nil, common.NewServiceError(http.StatusGone, response.Fail(response.CodeNotFound).WithMessage("资源已过期"))
 	}
 
 	// 免密
@@ -96,7 +111,7 @@ func (s *ShareAuthFilter) Serve(g *gin.Context) (any, error) {
 	}
 
 	// 检查是否过期
-	if time.Now().UnixMilli() > expireTimestamp {
+	if now > expireTimestamp {
 		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeSharePasswordFailed).WithMessage("资源需要口令"))
 	}
 

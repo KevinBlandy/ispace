@@ -72,6 +72,7 @@ func New() http.Handler {
 
 	memberApi.Use(
 		memberAuthFilter, // 认证
+		H(filter.NewMemberStatusCheckFilter(false, service.DefaultMemberService).Serve),
 	)
 
 	// 登出
@@ -81,35 +82,35 @@ func New() http.Handler {
 
 	// 文件 API 接口
 	{
-		memberApi.GET("/resources/stat", H(member.DefaultResourceApi().Stat))                                   // 资源统计
-		memberApi.GET("/resources/tree", H(member.DefaultResourceApi().Tree))                                   // 完整的文件树
-		memberApi.GET("/resources", H(member.DefaultResourceApi().List))                                        // 资源列表
-		memberApi.GET("/resources/:id", H(member.DefaultResourceApi().Content))                                 // 读取资源
-		memberApi.POST("/resources/upload", H(member.DefaultResourceApi().Upload))                              // 上传单个资源
-		memberApi.POST("/resources/upload/flash", H(member.DefaultResourceApi().UploadFlash))                   // 快传资源
-		memberApi.POST("/resources/upload/dir", H(member.DefaultResourceApi().UploadDir))                       // 上传文件夹
-		memberApi.POST("/resources/upload/download", H(member.DefaultResourceApi().UploadGet))                  // 下载远程资源
-		memberApi.GET("/resources/upload/download/events/:taskId", member.DefaultResourceApi().UploadGetEvents) // 下载远程资源事件
-		memberApi.POST("/resources/mkdir", H(member.DefaultResourceApi().MkDir))                                // 创建目录
-		memberApi.POST("/resources/:id/rename", H(member.DefaultResourceApi().Rename))                          // 重命名资源
-		memberApi.DELETE("/resources", H(member.DefaultResourceApi().Delete))                                   // 删除资源
-		memberApi.POST("/resources/move", H(member.DefaultResourceApi().Move))                                  // 移动资源
-		memberApi.GET("/resources/download", H(member.DefaultResourceApi().Download))                           // 下载资源
-		memberApi.GET("/resources/:id/unarchive", H(member.DefaultResourceApi().Unarchive))                     // 解压资源
-		memberApi.GET("/resources/search", H(member.DefaultResourceApi().Search))                               // 搜索资源
-		memberApi.GET("/resources/recent", H(member.DefaultResourceApi().Recent))                               // 最近上传
-		memberApi.GET("/resources/group", H(member.DefaultResourceApi().Group))                                 // 资源分组
-		memberApi.POST("/resources/share", H(member.DefaultResourceApi().Share))                                // 资源分享
+		memberApi.GET("/resources/stat", H(member.DefaultResourceApi().Stat))                                                // 资源统计
+		memberApi.GET("/resources/tree", H(member.DefaultResourceApi().Tree))                                                // 完整的文件树
+		memberApi.GET("/resources", H(member.DefaultResourceApi().List))                                                     // 资源列表
+		memberApi.Match([]string{http.MethodGet, http.MethodHead}, "/resources/:id", H(member.DefaultResourceApi().Content)) // 读取资源
+		memberApi.POST("/resources/upload", H(member.DefaultResourceApi().Upload))                                           // 上传单个资源
+		memberApi.POST("/resources/upload/flash", H(member.DefaultResourceApi().UploadFlash))                                // 快传资源
+		memberApi.POST("/resources/upload/dir", H(member.DefaultResourceApi().UploadDir))                                    // 上传文件夹
+		memberApi.POST("/resources/upload/download", H(member.DefaultResourceApi().UploadGet))                               // 下载远程资源
+		memberApi.GET("/resources/upload/download/events/:taskId", member.DefaultResourceApi().UploadGetEvents)              // 下载远程资源事件
+		memberApi.POST("/resources/mkdir", H(member.DefaultResourceApi().MkDir))                                             // 创建目录
+		memberApi.POST("/resources/:id/rename", H(member.DefaultResourceApi().Rename))                                       // 重命名资源
+		memberApi.DELETE("/resources", H(member.DefaultResourceApi().Delete))                                                // 删除资源
+		memberApi.POST("/resources/move", H(member.DefaultResourceApi().Move))                                               // 移动资源
+		memberApi.GET("/resources/download", H(member.DefaultResourceApi().Download))                                        // 下载资源
+		memberApi.GET("/resources/:id/unarchive", H(member.DefaultResourceApi().Unarchive))                                  // 解压资源
+		memberApi.GET("/resources/search", H(member.DefaultResourceApi().Search))                                            // 搜索资源
+		memberApi.GET("/resources/recent", H(member.DefaultResourceApi().Recent))                                            // 最近上传
+		memberApi.GET("/resources/group", H(member.DefaultResourceApi().Group))                                              // 资源分组
+		memberApi.POST("/resources/share", H(member.DefaultResourceApi().Share))                                             // 资源分享
 
 	}
 
 	// 回收站 API
 	{
-		memberApi.GET("/recycle-bin", H(member.DefaultRecycleBinApi.List))                // 项目列表
-		memberApi.GET("/recycle-bin/:id", H(member.DefaultRecycleBinApi.Content))         // 项目内容
-		memberApi.GET("/recycle-bin/:id/entries", H(member.DefaultRecycleBinApi.Entries)) // 项目列表
-		memberApi.DELETE("/recycle-bin", H(member.DefaultRecycleBinApi.Delete))           // 删除文件
-		memberApi.POST("/recycle-bin/restore", H(member.DefaultRecycleBinApi.Restore))    // 恢复文件
+		memberApi.GET("/recycle-bin", H(member.DefaultRecycleBinApi.List))                                                     // 项目列表
+		memberApi.Match([]string{http.MethodGet, http.MethodHead}, "/recycle-bin/:id", H(member.DefaultRecycleBinApi.Content)) // 项目内容
+		memberApi.GET("/recycle-bin/:id/entries", H(member.DefaultRecycleBinApi.Entries))                                      // 项目列表
+		memberApi.DELETE("/recycle-bin", H(member.DefaultRecycleBinApi.Delete))                                                // 删除文件
+		memberApi.POST("/recycle-bin/restore", H(member.DefaultRecycleBinApi.Restore))                                         // 恢复文件
 	}
 
 	// 对象 Api 接口
@@ -136,6 +137,7 @@ func New() http.Handler {
 
 		// 资源访问，可选的会员认证
 		optionalMemberAuthFilter := H(filter.NewMemberAuthFilter(true).Serve)
+		optionalMemberStatusFilter := H(filter.NewMemberStatusCheckFilter(true, service.DefaultMemberService).Serve)
 
 		// 资源访问，口令验证
 		shareAuthFilter := H(filter.NewShareAuthFilter(
@@ -144,12 +146,12 @@ func New() http.Handler {
 			service.DefaultShareService,
 		).Serve)
 
-		shareApi.GET("/share/:path", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.Share))                                     // 资源信息
-		shareApi.POST("/share/:path/verify", H(member.DefaultShareApi.Verify))                                                                       // 密码校验
-		shareApi.GET("/share/:path/resources", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.ResourceList))                    // 资源列表
-		shareApi.GET("/share/:path/resources/:resourceId", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.Content))             // 读取文件内容
-		shareApi.GET("/share/:path/resources/download", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.Download))               // 文件下载
-		shareApi.GET("/share/:path/resources/:resourceId/unarchive", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.Unarchive)) // 解压文件
+		shareApi.POST("/share/:path/verify", H(member.DefaultShareApi.Verify))                                                                                                        // 密码校验
+		shareApi.GET("/share/:path", optionalMemberAuthFilter, optionalMemberStatusFilter, shareAuthFilter, H(member.DefaultShareApi.Share))                                          // 资源信息
+		shareApi.GET("/share/:path/resources", optionalMemberAuthFilter, optionalMemberStatusFilter, shareAuthFilter, H(member.DefaultShareApi.ResourceList))                         // 资源列表
+		shareApi.Match([]string{http.MethodGet, http.MethodHead}, "/share/:path/resources/:resourceId", optionalMemberAuthFilter, shareAuthFilter, H(member.DefaultShareApi.Content)) // 读取文件内容
+		shareApi.GET("/share/:path/resources/download", optionalMemberAuthFilter, optionalMemberStatusFilter, shareAuthFilter, H(member.DefaultShareApi.Download))                    // 文件下载
+		shareApi.GET("/share/:path/resources/:resourceId/unarchive", optionalMemberAuthFilter, optionalMemberStatusFilter, shareAuthFilter, H(member.DefaultShareApi.Unarchive))      // 解压文件
 	}
 
 	// ======================================================================
@@ -165,6 +167,7 @@ func New() http.Handler {
 
 	managerApi.Use(
 		H(filter.NewManagerAuthFilter(false).Serve),
+		H(filter.NewManagerStatusCheckFilter(false, service.DefaultAdminService).Serve),
 	)
 
 	// 登出
@@ -187,10 +190,10 @@ func New() http.Handler {
 
 	// 资源管理
 	{
-		managerApi.GET("/objects", H(manager.DefaultObjectApi.List))         // 资源列表
-		managerApi.GET("/objects/:id", H(manager.DefaultObjectApi.Content))  // 读取资源
-		managerApi.PATCH("/objects/:id", H(manager.DefaultObjectApi.Update)) // 更新资源
-		managerApi.DELETE("/objects", H(manager.DefaultObjectApi.Delete))    // 删除资源
+		managerApi.GET("/objects", H(manager.DefaultObjectApi.List))                                                     // 资源列表
+		managerApi.Match([]string{http.MethodGet, http.MethodHead}, "/objects/:id", H(manager.DefaultObjectApi.Content)) // 读取资源
+		managerApi.PATCH("/objects/:id", H(manager.DefaultObjectApi.Update))                                             // 更新资源
+		managerApi.DELETE("/objects", H(manager.DefaultObjectApi.Delete))                                                // 删除资源
 	}
 
 	// 设置 Api 接口

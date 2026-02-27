@@ -1374,18 +1374,18 @@ func (s *ResourceService) MoveToRecycleBin(ctx context.Context, request *api.Res
 		}
 
 		// 删除分享的记录，只删除文件，不删除文件夹，避免破坏分享目录的结构
-		rIds = make([]int64, 0)
-		if !resource.Dir {
-			rIds = append(rIds, rId)
-		}
-		for _, entry := range entries {
-			if !entry.Dir {
-				rIds = append(rIds, entry.Id)
-			}
-		}
+		//rIds = make([]int64, 0)
+		//if !resource.Dir {
+		//	rIds = append(rIds, rId)
+		//}
+		//for _, entry := range entries {
+		//	if !entry.Dir {
+		//		rIds = append(rIds, entry.Id)
+		//	}
+		//}
 
 		if len(rIds) > 0 {
-			if _, err := gorm.G[model.ShareResource](session).Where("resource_id IN ?", rIds).Delete(ctx); err != nil {
+			if _, err := gorm.G[model.ShareResource](session).Where("resource_id IN ? AND resource_dir = ?", rIds, false).Delete(ctx); err != nil {
 				return err
 			}
 		}

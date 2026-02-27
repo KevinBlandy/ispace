@@ -152,6 +152,16 @@ func (a AdminService) UpdatePassword(ctx context.Context, request *api.AdminPass
 	return nil
 }
 
+// GetAdminById 管理员
+func (a AdminService) GetAdminById(ctx context.Context, adminId int64, columns ...string) (*model.Admin, error) {
+	if len(columns) == 0 {
+		return gorm.G[*model.Admin](db.Session(ctx)).Where("id = ?", adminId).Take(ctx)
+	}
+	return gorm.G[*model.Admin](db.Session(ctx)).
+		Select(columns[0], columns[1:]).
+		Where("id = ?", adminId).Take(ctx)
+}
+
 func NewAdminService() *AdminService {
 	return &AdminService{}
 }

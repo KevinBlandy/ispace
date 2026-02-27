@@ -379,7 +379,10 @@ func (s RecycleBinService) GetObject(ctx context.Context, memberId int64, id int
 
 // Clean 清理过期的回收站内容
 func (s RecycleBinService) Clean(ctx context.Context) (int64, error) {
-	t := time.Now().AddDate(0, 0, -30).UnixMilli() // 小于30 天前的都删除
+	// t := time.Now().AddDate(0, 0, -30).UnixMilli() // 小于30 天前的都删除
+
+	t := time.Now().Add(-time.Minute).UnixMilli()
+
 	session := db.Session(ctx)
 
 	rows, err := session.
