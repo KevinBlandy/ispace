@@ -30,7 +30,7 @@ func (m *MemberStatusCheckFilter) Serve(g *gin.Context) (any, error) {
 		if m.optional {
 			return nil, nil
 		}
-		return nil, common.NewServiceError(http.StatusUnauthorized, response.Fail(response.CodeUnauthorized).WithCode("Authorization Required"))
+		return nil, common.NewServiceError(http.StatusUnauthorized, response.Fail(response.CodeUnauthorized).WithMessage("Authorization Required"))
 	}
 
 	// 检索会员状态
@@ -41,11 +41,11 @@ func (m *MemberStatusCheckFilter) Serve(g *gin.Context) (any, error) {
 		return nil, err
 	}
 	if member.Id == 0 {
-		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithCode("用户信息错误"))
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("用户信息错误"))
 	}
 
 	if !member.Enabled {
-		return nil, common.NewServiceError(http.StatusForbidden, response.Fail(response.CodeForbidden).WithCode("账户被禁用"))
+		return nil, common.NewServiceError(http.StatusForbidden, response.Fail(response.CodeForbidden).WithMessage("账户被禁用"))
 	}
 	return nil, nil
 }

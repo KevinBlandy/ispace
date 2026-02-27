@@ -38,7 +38,10 @@ func (s ShareService) List(ctx context.Context, request *api.ShareListRequest) (
 		-- 检索 root 节点的资源名称，拼接起来作为标题
 		(
 			SELECT GROUP_CONCAT(t2.resource_title, ',') FROM t_share_resource t2 WHERE t2.share_id = t.id AND t2.root = 1
-		) title
+		) title,
+		(
+			SELECT COUNT(1) FROM t_share_resource WHERE share_id = t.id AND resource_dir = 0
+		) resources
 	FROM
 		t_share t
 	WHERE

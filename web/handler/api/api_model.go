@@ -255,6 +255,7 @@ type ShareListResponse struct {
 	Enabled    bool   `json:"enabled"`
 	Password   string `json:"password"`
 	Views      int64  `json:"views"`
+	Resources  int64  `json:"resources"` // 资源数量
 	CreateTime int64  `json:"createTime,string"`
 	ExpireTime int64  `json:"expireTime,string"`
 }

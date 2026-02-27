@@ -81,7 +81,7 @@ func (o *ObjectApi) Delete(g *gin.Context) (any, error) {
 func (o *ObjectApi) Content(g *gin.Context) (any, error) {
 	objectId, _ := strconv.ParseInt(g.Param("id"), 10, 64)
 	if objectId < 1 {
-		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithCode("非法请求"))
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
 	}
 
 	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*model.Object, error) {
@@ -92,7 +92,7 @@ func (o *ObjectApi) Content(g *gin.Context) (any, error) {
 		return nil, err
 	}
 	if ret.Id == 0 {
-		return nil, common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithCode("对象不存在"))
+		return nil, common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("对象不存在"))
 	}
 
 	err = store.DefaultStore().ServeContent(g.Writer, g.Request, &store.File{

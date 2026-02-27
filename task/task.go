@@ -27,7 +27,6 @@ func Initialization() (func(), error) {
 	if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewShareCleaner(service.DefaultShareService)); err != nil {
 		return func() {}, nil
 	}
-	// TODO 每分钟执行一次会员删除队列的清理
 
 	scheduler.Start()
 	return func() {

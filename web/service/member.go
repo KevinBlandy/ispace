@@ -229,36 +229,64 @@ func (m *MemberService) Delete(ctx context.Context, request *api.MemberDeleteReq
 // deleteById 根据 ID 删除会员
 func (m *MemberService) deleteById(ctx context.Context, memberId int64) error {
 
-	// 查询完整会员信息
-	member, err := gorm.G[model.Member](db.Session(ctx)).Where("id = ?", memberId).Take(ctx)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("会员记录已删除"))
-	}
+	session := db.Session(ctx)
+
+	//// 查询完整会员信息
+	//member, err := gorm.G[model.Member](session).Where("id = ?", memberId).Take(ctx)
+	//if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	//	return err
+	//}
+	//if member.Id < 1 {
+	//	return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("会员记录已删除"))
+	//}
 
 	// 删除记录
-	affectedRows, err := gorm.G[model.Member](db.Session(ctx)).Where("id = ?", memberId).Delete(ctx)
+	affectedRows, err := gorm.G[model.Member](session).Where("id = ?", memberId).Delete(ctx)
 	if err != nil {
 		return err
 	}
 	if affectedRows == 0 {
 		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("会员记录删除失败"))
 	}
-	// 添加删除会员的队列
-	return gorm.G[model.MemberDeletedQueue](db.Session(ctx)).Create(ctx, &model.MemberDeletedQueue{
-		Id:          id.Next().Int64(),
-		MemberId:    member.Id,
-		Avatar:      member.Avatar,
-		Account:     member.Account,
-		Password:    member.Password,
-		Email:       member.Email,
-		Enabled:     member.Enabled,
-		CreateTime:  member.CreateTime,
-		UpdateTime:  member.UpdateTime,
-		DeletedTime: time.Now().UnixMilli(),
-	})
+
+	// 删除回收站内容
+	if _, err := gorm.G[model.RecycleBin](session).Where("member_id = ?", memberId).Delete(ctx); err != nil {
+		return err
+	}
+
+	// 删除分享内容
+	if err := session.
+		Exec("DELETE FROM t_share_resource WHERE share_id IN (SELECT id FROM t_share WHERE member_id = ?)", memberId).
+		Error; err != nil {
+		return err
+	}
+	if err := session.
+		Exec("DELETE FROM t_share WHERE member_id = ?", memberId).
+		Error; err != nil {
+		return err
+	}
+
+	// obj 引用递减
+	rows, err := session.Raw("SELECT object_id FROM t_resource WHERE member_id = ? AND dir = ?", memberId, false).Rows()
+	if err != nil {
+		return err
+	}
+	defer util.SafeClose(rows)
+
+	for rows.Next() {
+		var objectId int64
+		if err := rows.Scan(&objectId); err != nil {
+			return err
+		}
+		if err := session.Exec("UPDATE t_object SET ref_count = ref_count - ? WHERE id = ?", 1, objectId).Error; err != nil {
+			return err
+		}
+	}
+
+	// 删除资源
+	return session.
+		Exec("DELETE FROM t_resource WHERE member_id = ?", memberId).
+		Error
 }
 
 // UpdatePassword 修改密码

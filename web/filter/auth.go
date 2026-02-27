@@ -43,7 +43,7 @@ func (a *AuthFilter) Serve(c *gin.Context) (any, error) {
 		if a.optional { // 非强制的
 			return nil, nil
 		}
-		return nil, common.NewServiceError(http.StatusUnauthorized, response.Fail(response.CodeUnauthorized).WithCode("Token Required"))
+		return nil, common.NewServiceError(http.StatusUnauthorized, response.Fail(response.CodeUnauthorized).WithMessage("Token Required"))
 	}
 
 	session, err := a.sessionService.Parse(c.Request.Context(), token)

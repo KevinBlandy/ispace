@@ -23,20 +23,20 @@ func (Member) TableName() string {
 	return "t_member"
 }
 
-// MemberDeletedQueue 会员删除队列
-type MemberDeletedQueue struct {
-	Id          int64 `gorm:"primaryKey"`
-	MemberId    int64 `gorm:"uniqueIndex"`
-	Avatar      string
-	Account     string
-	Password    string
-	Email       string
-	Enabled     bool
-	CreateTime  int64
-	UpdateTime  int64
-	DeletedTime int64 // 删除时间
-}
-
-func (MemberDeletedQueue) TableName() string {
-	return "t_member_deleted_queue"
-}
+//// MemberDeletedQueue 会员删除队列
+//type MemberDeletedQueue struct {
+//	Id          int64 `gorm:"primaryKey"`
+//	MemberId    int64 `gorm:"uniqueIndex"`
+//	Avatar      string
+//	Account     string
+//	Password    string
+//	Email       string
+//	Enabled     bool
+//	CreateTime  int64
+//	UpdateTime  int64
+//	DeletedTime int64 // 删除时间
+//}
+//
+//func (MemberDeletedQueue) TableName() string {
+//	return "t_member_deleted_queue"
+//}

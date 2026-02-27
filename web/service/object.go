@@ -15,6 +15,7 @@ import (
 	"ispace/web/handler/api"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -96,7 +97,7 @@ func (o *ObjectService) deleteById(ctx context.Context, id int64) error {
 	session := db.Session(ctx)
 
 	// TODO FOR UPDATE
-	obj, err := gorm.G[model.Object](session).Select("id", "size").Where("id = ?", id).Take(ctx)
+	obj, err := gorm.G[model.Object](session).Select("id", "size", "path").Where("id = ?", id).Take(ctx)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
@@ -104,22 +105,37 @@ func (o *ObjectService) deleteById(ctx context.Context, id int64) error {
 		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源不存在"))
 	}
 
-	// 删除回收站数据
-	_, err = gorm.G[model.RecycleBin](session).Where("resource_object_id = ?", obj.Id).Delete(ctx)
-	if err != nil {
-		return err
-	}
-
-	// 删除分享数据
-	_, err = gorm.G[model.ShareResource](session).Where("resource_object_id = ?", obj.Id).Delete(ctx)
-
-	// 删除资源数据
-	rows, err := session.Raw("SELECT id, member_id FROM t_resource WHERE object_id = ?", obj.Id).Rows()
+	// 删除回收站数据 & 更新会员存储空间
+	rows, err := session.Raw("SELECT id, member_id FROM t_recycle_bin WHERE resource_object_id = ?", obj.Id).Rows()
 	if err != nil {
 		return err
 	}
 	defer util.SafeClose(rows)
+	for rows.Next() {
+		var recycleId, memberId int64
+		if err := rows.Scan(&recycleId, &memberId); err != nil {
+			return err
+		}
+		// 更新会员的空间占用
+		if err := o.memberService.AddUsedStorageSpace(ctx, memberId, -obj.Size); err != nil {
+			return err
+		}
+		// 删除记录
+		affected, err := gorm.G[model.RecycleBin](session).Where("id = ?", recycleId).Delete(ctx)
+		if err != nil {
+			return err
+		}
+		if affected == 0 {
+			return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("资源删除失败"))
+		}
+	}
 
+	// 删除资源数据 & 更新会员存储空间
+	rows, err = session.Raw("SELECT id, member_id FROM t_resource WHERE object_id = ?", obj.Id).Rows()
+	if err != nil {
+		return err
+	}
+	defer util.SafeClose(rows)
 	for rows.Next() {
 		var resourceId, memberId int64
 		if err := rows.Scan(&resourceId, &memberId); err != nil {
@@ -139,6 +155,9 @@ func (o *ObjectService) deleteById(ctx context.Context, id int64) error {
 		}
 	}
 
+	// 删除分享数据
+	_, err = gorm.G[model.ShareResource](session).Where("resource_object_id = ?", obj.Id).Delete(ctx)
+
 	// 删除对象
 	affected, err := gorm.G[model.Object](session).Where("id = ?", id).Delete(ctx)
 	if err != nil {
@@ -147,7 +166,13 @@ func (o *ObjectService) deleteById(ctx context.Context, id int64) error {
 	if affected == 0 {
 		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("对象删除失败"))
 	}
-	return nil
+
+	// 删除物理文件
+	err = store.DefaultStore().Remove(obj.Path)
+	if errors.Is(err, os.ErrNotExist) {
+		err = nil
+	}
+	return err
 }
 
 // InvalidClean 清理无效的存储对象
