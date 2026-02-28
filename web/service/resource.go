@@ -1242,7 +1242,7 @@ func (s *ResourceService) Group(ctx context.Context, request *api.ResourceGroupR
 
 	if request.ContentType != "" {
 		groupStatement.WriteString(" AND t.content_type LIKE ?")
-		groupConditions = append(groupConditions, "%"+request.ContentType+"%")
+		groupConditions = append(groupConditions, request.ContentType+"%")
 	}
 
 	groupStatement.WriteString(" GROUP BY _group ORDER BY _group DESC")
