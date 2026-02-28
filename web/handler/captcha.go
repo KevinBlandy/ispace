@@ -95,10 +95,15 @@ func (c *Captcha) Validate(ctx *gin.Context) (any, error) {
 	//	return nil, err
 	//}
 
-	val, ok := c.cache.Get(c.CaptchaKey + captchaId)
+	captchaKey := c.CaptchaKey + captchaId
+
+	val, ok := c.cache.Get(captchaKey)
 	if !ok {
 		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeCaptchaFailed).WithMessage("验证码错误"))
 	}
+
+	c.cache.Delete(captchaKey)
+
 	text, ok := val.(string)
 	if !ok {
 		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeCaptchaFailed).WithMessage("验证码错误"))

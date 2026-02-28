@@ -6,4 +6,4 @@ import (
 )
 
 //go:embed resource
-var Resource embed.FS
+var ResourceFs embed.FS

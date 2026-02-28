@@ -4,3 +4,5 @@
 /database
 /storage
 .claude
+
+web/resource/public/*

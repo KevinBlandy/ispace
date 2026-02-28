@@ -1,19 +1,14 @@
 package router
 
 import (
-	"io/fs"
 	"ispace/common/constant"
 	"ispace/common/types"
-	"ispace/common/util"
-	"ispace/config"
-	"ispace/web"
 	"ispace/web/filter"
 	"ispace/web/handler"
 	"ispace/web/handler/api/manager"
 	"ispace/web/handler/api/member"
 	"ispace/web/service"
 	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,7 +23,7 @@ var MockAuthFilter = func(id int64) gin.HandlerFunc {
 	}
 }
 
-func New() http.Handler {
+func New(publicFs ...http.FileSystem) http.Handler {
 
 	router := gin.New()
 	router.RedirectTrailingSlash = false
@@ -211,14 +206,10 @@ func New() http.Handler {
 		managerApi.DELETE("/sys-configs", H(manager.DefaultSysConfigApi.Delete))
 	}
 
-	// 静态资源在最后
-	router.Use(handler.NewFsHandler(
-		http.FS(util.Require(func() (*os.Root, error) { // 指定的公共目录优先级最高
-			return os.OpenRoot(*config.PublicDir)
-		}).FS()),
-		http.FS(util.Require(func() (fs.FS, error) { // 嵌入式目录
-			return fs.Sub(web.Resource, "resource/public")
-		})),
-	))
+	if len(publicFs) > 0 {
+		// 静态资源在最后
+		router.Use(handler.NewFsHandler(publicFs...))
+	}
+
 	return router
 }

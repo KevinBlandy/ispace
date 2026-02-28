@@ -3,11 +3,15 @@ package serve
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"ispace/common/constant"
+	"ispace/common/util"
 	"ispace/config"
 	"ispace/db"
 	"ispace/log"
 	"ispace/task"
+	"ispace/web"
+	"ispace/web/router"
 	"ispace/web/server"
 	"log/slog"
 	"net/http"
@@ -45,13 +49,35 @@ func Serve() {
 	// ===================================
 	taskStop, err := task.Initialization()
 	if err != nil {
+		slog.Error("定时任务初始化异常",
+			slog.String("err", err.Error()),
+		)
+		return
+	}
+
+	// 用户指定的公共资源目录
+	publicRoot, err := os.OpenRoot(*config.PublicDir)
+	if err != nil {
+		slog.Error("公共资源目录初始化异常",
+			slog.String("err", err.Error()),
+		)
+		return
+	}
+	defer util.SafeClose(publicRoot)
+
+	// 嵌入式公共资源目录
+	embedFs, err := fs.Sub(web.ResourceFs, "resource/public")
+	if err != nil {
+		slog.Error("嵌入目录初始化异常",
+			slog.String("err", err.Error()),
+		)
 		return
 	}
 
 	// ===================================
 	// HTTP 服务
 	// ===================================
-	httpServer := server.New()
+	httpServer := server.New(router.New(http.FS(publicRoot.FS()), http.FS(embedFs)))
 
 	go func() {
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)

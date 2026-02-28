@@ -4,15 +4,14 @@ import (
 	"fmt"
 	"ispace/common/types"
 	"ispace/config"
-	"ispace/web/router"
 	"net/http"
 )
 
-func New() *http.Server {
+func New(router http.Handler) *http.Server {
 	server := http.Server{
 		Addr:           fmt.Sprintf("%s:%d", *config.HttpHost, *config.HttpPort),
 		MaxHeaderBytes: int(types.KB * 4), // 最大4Kb
-		Handler:        router.New(),
+		Handler:        router,
 	}
 	return &server
 }
