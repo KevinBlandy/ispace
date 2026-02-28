@@ -340,6 +340,11 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 		slog.String("hash", hash),
 	)
 
+	// close & flush
+	if err := writer.Close(); err != nil {
+		return err
+	}
+
 	// 查询文件状态
 	stat, err := newFile.Stat()
 	if err != nil {

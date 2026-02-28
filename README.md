@@ -10,6 +10,7 @@
 
 ```shell
 ./ispace \
+  --db "database/db" \
   --log.dir "logs" \
   --public.dir "public" \
   --store.dir "storage" \
@@ -18,6 +19,7 @@
 
 ```
 
+* `db` SQL 数据库文件
 * `log.dir`  指定日志输出目录
 * `public.dir` 公共资源目录，这里面的资源可以被直接访问
 * `store.dir` 存储上传文件的目录

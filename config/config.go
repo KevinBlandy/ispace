@@ -2,6 +2,8 @@ package config
 
 import (
 	"flag"
+	"ispace/common/util"
+	"os"
 	"path/filepath"
 	"time"
 )
@@ -85,7 +87,20 @@ func Initialization(args []string) error {
 		return err
 	}
 
-	// TODO 尝试初始化 DB 文件和公共资源目录
+	// 创建 DB 文件
+	if err := os.MkdirAll(filepath.Dir(*DB), os.ModePerm); err != nil && !os.IsExist(err) {
+		return err
+	}
+	dbFile, err := os.OpenFile(*DB, os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+	defer util.SafeClose(dbFile)
+
+	// 创建公共资源目录
+	if err := os.MkdirAll(*PublicDir, os.ModePerm); err != nil && !os.IsExist(err) {
+		return err
+	}
 
 	return nil
 }
