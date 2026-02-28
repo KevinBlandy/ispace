@@ -1242,7 +1242,7 @@ func (s *ResourceService) Group(ctx context.Context, request *api.ResourceGroupR
 
 	if request.ContentType != "" {
 		groupStatement.WriteString(" AND t.content_type LIKE CONCAT(?, '%')")
-		groupConditions = append(groupConditions, request.ContentType+"/")
+		groupConditions = append(groupConditions, request.ContentType)
 	}
 
 	groupStatement.WriteString(" GROUP BY _group ORDER BY _group DESC")
@@ -1286,8 +1286,8 @@ func (s *ResourceService) Group(ctx context.Context, request *api.ResourceGroupR
 			`)
 
 	if request.ContentType != "" {
-		itemStatement.WriteString(" AND t.content_type LIKE ?")
-		itemConditions = append(itemConditions, "%"+request.ContentType+"%")
+		itemStatement.WriteString(" AND t.content_type CONCAT(?, '%')")
+		itemConditions = append(itemConditions, request.ContentType)
 	}
 	itemStatement.WriteString(" AND " + groupField + " = ?")
 	itemStatement.WriteString(" ORDER BY t.create_time DESC")
