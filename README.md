@@ -3,8 +3,8 @@
 
 个人云盘系统，不依赖任何第三方服务，使用 SQLite 作为数据库。
 
-* 用户系统：`http(s)//:<host>`
-* 管理系统：`http(s)//:<host>/manager`
+* 用户系统：`http(s)//:<host>/`
+* 管理系统：`http(s)//:<host>/#/manager`
 
 ## 启动命令
 
