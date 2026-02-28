@@ -4,7 +4,6 @@ import (
 	"context"
 	"ispace/common/id"
 	"ispace/db"
-	"ispace/rdb"
 	"ispace/repo"
 	"ispace/repo/model"
 	"ispace/web/service"
@@ -26,10 +25,10 @@ func initialization() error {
 	if err := repo.Initialization(); err != nil {
 		return err
 	}
-	// redis
-	if err := rdb.Initialization(); err != nil {
-		return err
-	}
+	//// redis
+	//if err := rdb.Initialization(); err != nil {
+	//	return err
+	//}
 
 	// 初始化 root 账户
 	if err := rootAccount(); err != nil {

@@ -2,13 +2,10 @@ package service
 
 import (
 	"context"
-	"errors"
 	"ispace/common"
 	"ispace/common/id"
 	"ispace/common/response"
-	"ispace/rdb"
 	"ispace/repo/model"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,31 +13,30 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/redis/go-redis/v9"
 )
 
 type Session struct {
-	Id      string // 会话 ID
-	Subject int64  // Subject
+	Id       string    // 会话 ID
+	Subject  int64     // Subject
+	ExpireAt time.Time // 过期时间
 
-	// TODO 待优化
-	UserAgent  string    // 客户端
-	RemoteAddr string    // 客户端 IP
-	IssuedAt   time.Time // 签发时间
-	ExpireAt   time.Time // 过期时间
-	LastAccess time.Time // 最后访问时间
+	//// TODO 待优化
+	// UserAgent  string    // 客户端
+	// RemoteAddr string    // 客户端 IP
+	// IssuedAt   time.Time // 签发时间
+	// LastAccess time.Time // 最后访问时间
 }
 
 type SessionService struct {
 	sysConfigService *SysConfigService // 系统配置
 	nameSpace        string            // 命名空间
-	redisConn        *redis.Client     // Redis
+	//redisConn        *redis.Client     // Redis
 }
 
-func NewAuthService(nameSpace string, redisConn *redis.Client, service *SysConfigService) *SessionService {
+func NewAuthService(nameSpace string, service *SysConfigService) *SessionService {
 	return &SessionService{
-		nameSpace:        nameSpace,
-		redisConn:        redisConn,
+		nameSpace: nameSpace,
+		//redisConn:        redisConn,
 		sysConfigService: service,
 	}
 }
@@ -57,11 +53,20 @@ func (a *SessionService) Issue(ctx context.Context, subjectId int64) (string, er
 	subject := strconv.FormatInt(subjectId, 10) // SubjectID
 	now := time.Now()                           // 签发时间
 
+	expire := a.sysConfigService.Get(ctx, model.SysConfigKeySessionExpire).DurationValue()
+
+	//claims := jwt.MapClaims{}
+	//claims["id"] = jwtId
+	//claims["subject"] = subject
+	//claims["iat"] = jwt.NewNumericDate(now)
+	//claims["exp"] = jwt.NewNumericDate(now.Add(expire))
+
 	// 签发 Token
-	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS512, &jwt.RegisteredClaims{
-		ID:       jwtId,
-		Subject:  subject,
-		IssuedAt: jwt.NewNumericDate(now),
+	return jwt.NewWithClaims(jwt.SigningMethodHS512, &jwt.RegisteredClaims{
+		ID:        jwtId,
+		Subject:   subject,
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(expire)),
 	}).SignedString([]byte(a.sysConfigService.Get(ctx, model.SysConfigKeySessionSecret).Value))
 
 	//result, err := auth.JWTEncode(
@@ -69,20 +74,20 @@ func (a *SessionService) Issue(ctx context.Context, subjectId int64) (string, er
 	//	subject,
 	//	a.sysConfigService.Get(model.SysConfigKeySessionSecret).Value,
 	//)
-
-	if err != nil {
-		return "", err
-	}
-
+	//
+	//if err != nil {
+	//	return "", err
+	//}
+	//
 	// 过期时间
-	expire := a.sysConfigService.Get(ctx, model.SysConfigKeySessionExpire).DurationValue()
-
-	// 缓存到 Redis
-	_, err = rdb.ExecuteClient(a.redisConn, func(conn *redis.Conn) (any, error) {
-		return conn.Set(ctx, a.sessionKey(subject, jwtId), now.Add(expire).UnixMilli(), expire).Result()
-	})
-
-	return signed, err
+	//expire := a.sysConfigService.Get(ctx, model.SysConfigKeySessionExpire).DurationValue()
+	//
+	//// 缓存到 Redis
+	//_, err = rdb.ExecuteClient(a.redisConn, func(conn *redis.Conn) (any, error) {
+	//	return conn.Set(ctx, a.sessionKey(subject, jwtId), now.Add(expire).UnixMilli(), expire).Result()
+	//})
+	//
+	//return signed, err
 }
 
 // Parse 解析 Session
@@ -106,63 +111,49 @@ func (a *SessionService) Parse(ctx context.Context, signed string) (*Session, er
 	if err != nil {
 		return nil, err
 	}
-
-	// 从缓存获取
-	result, err := rdb.ExecuteClient(a.redisConn, func(conn *redis.Conn) (string, error) {
-		return conn.Get(ctx, a.sessionKey(subject, jwtId)).Result()
-	})
-
-	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			// 过期
-			err = common.NewServiceError(http.StatusUnauthorized, response.Fail(response.CodeUnauthorized).WithMessage("Token Expired"))
-		} else {
-			slog.ErrorContext(ctx, "查询 session 缓存异常", slog.String("err", err.Error()))
-		}
-		return nil, err
-	}
-
 	subjectId, err := strconv.ParseInt(subject, 10, 64)
 	if err != nil {
 		return nil, err
 	}
-	expireAt, err := strconv.ParseInt(result, 10, 64)
-	if err != nil {
-		return nil, err
+
+	var expireAt time.Time
+
+	if claims.ExpiresAt != nil {
+		expireAt = claims.ExpiresAt.Time
 	}
 
 	return &Session{
 		Id:       jwtId,
 		Subject:  subjectId,
-		ExpireAt: time.UnixMilli(expireAt),
+		ExpireAt: expireAt,
 	}, nil
 }
 
-// Renewal 续约 Session
-func (a *SessionService) Renewal(ctx context.Context, session *Session) (bool, error) {
-
-	expire := a.sysConfigService.Get(ctx, model.SysConfigKeySessionExpire).DurationValue()
-
-	return rdb.ExecuteClient(a.redisConn, func(conn *redis.Conn) (bool, error) {
-		return conn.SetXX(ctx,
-			a.sessionKey(strconv.FormatInt(session.Subject, 10), session.Id),
-			time.Now().Add(expire).UnixMilli(),
-			expire,
-		).Result()
-		//return conn.ExpireXX(ctx,
-		//	a.sessionKey(strconv.FormatInt(session.Subject, 10), session.Id),
-		//	a.sysConfigService.Get(model.SysConfigKeySessionExpire).DurationValue(),
-		//).Result()
-	})
-}
-
-// Invalid 失效 Session
-func (a *SessionService) Invalid(session *Session) error {
-	_, err := rdb.ExecuteClient(a.redisConn, func(conn *redis.Conn) (int64, error) {
-		return conn.Del(context.Background(), a.sessionKey(strconv.FormatInt(session.Subject, 10), session.Id)).Result()
-	})
-	return err
-}
+//// Renewal 续约 Session
+//func (a *SessionService) Renewal(ctx context.Context, session *Session) (bool, error) {
+//
+//	expire := a.sysConfigService.Get(ctx, model.SysConfigKeySessionExpire).DurationValue()
+//
+//	return rdb.ExecuteClient(a.redisConn, func(conn *redis.Conn) (bool, error) {
+//		return conn.SetXX(ctx,
+//			a.sessionKey(strconv.FormatInt(session.Subject, 10), session.Id),
+//			time.Now().Add(expire).UnixMilli(),
+//			expire,
+//		).Result()
+//		//return conn.ExpireXX(ctx,
+//		//	a.sessionKey(strconv.FormatInt(session.Subject, 10), session.Id),
+//		//	a.sysConfigService.Get(model.SysConfigKeySessionExpire).DurationValue(),
+//		//).Result()
+//	})
+//}
+//
+//// Invalid 失效 Session
+//func (a *SessionService) Invalid(session *Session) error {
+//	_, err := rdb.ExecuteClient(a.redisConn, func(conn *redis.Conn) (int64, error) {
+//		return conn.Del(context.Background(), a.sessionKey(strconv.FormatInt(session.Subject, 10), session.Id)).Result()
+//	})
+//	return err
+//}
 
 //// keyFunc 返回 jwt 加密 key
 //func (a *SessionService) keyFunc(_ *jwt.Token) (any, error) {
@@ -171,10 +162,10 @@ func (a *SessionService) Invalid(session *Session) error {
 
 // DefaultMemberSessionService 用户会话
 var DefaultMemberSessionService = sync.OnceValue(func() *SessionService {
-	return NewAuthService("session_member", rdb.Get(), DefaultSysConfigService)
+	return NewAuthService("session_member", DefaultSysConfigService)
 })
 
 // DefaultManagerSessionService 管理员会话
 var DefaultManagerSessionService = sync.OnceValue(func() *SessionService {
-	return NewAuthService("session_manager", rdb.Get(), DefaultSysConfigService)
+	return NewAuthService("session_manager", DefaultSysConfigService)
 })

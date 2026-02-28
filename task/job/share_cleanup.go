@@ -32,5 +32,7 @@ func (s *ShareCleaner) Run() {
 		slog.Error("分享清理执行异常", slog.String("err", err.Error()))
 		return
 	}
-	slog.Info("分享清理完毕", slog.Int64("清理数量", c))
+	if c > 0 {
+		slog.Info("分享清理完毕", slog.Int64("清理数量", c))
+	}
 }

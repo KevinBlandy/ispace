@@ -7,7 +7,6 @@ import (
 	"ispace/config"
 	"ispace/db"
 	"ispace/log"
-	"ispace/rdb"
 	"ispace/task"
 	"ispace/web/server"
 	"log/slog"
@@ -81,7 +80,7 @@ func Serve() {
 	taskStop()
 
 	_ = db.Close()
-	_ = rdb.Close()
+	//_ = rdb.Close()
 
 	slog.Info("服务已停止")
 }

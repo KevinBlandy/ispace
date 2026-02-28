@@ -32,5 +32,8 @@ func (r *RecycleBinCleaner) Run() {
 		slog.Error("回收站清理执行异常", slog.String("err", err.Error()))
 		return
 	}
-	slog.Info("回收站清理完毕", slog.Int64("清理数量", s))
+
+	if s > 0 {
+		slog.Info("回收站清理完毕", slog.Int64("清理数量", s))
+	}
 }

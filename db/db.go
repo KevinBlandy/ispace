@@ -46,10 +46,10 @@ func Initialization() (err error) {
 	if err != nil {
 		return err
 	}
-	database.SetMaxIdleConns(*config.DBPoolMaxIdleConn)
-	database.SetMaxOpenConns(*config.DBPoolMaxOpenConn)
-	database.SetConnMaxIdleTime(*config.DBPoolMaxIdleTime)
-	database.SetConnMaxLifetime(*config.DBPoolMaxLifetime)
+	//database.SetMaxIdleConns(*config.DBPoolMaxIdleConn)
+	//database.SetMaxOpenConns(*config.DBPoolMaxOpenConn)
+	//database.SetConnMaxIdleTime(*config.DBPoolMaxIdleTime)
+	//database.SetConnMaxLifetime(*config.DBPoolMaxLifetime)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()

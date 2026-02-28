@@ -51,10 +51,10 @@ func (a *SignInApi) SignIn(ctx *gin.Context) (any, error) {
 
 // SignOut 登出
 func (a *SignInApi) SignOut(g *gin.Context) (any, error) {
-	err := service.DefaultManagerSessionService().Invalid(g.MustGet(constant.CtxKeySession).(*service.Session))
-	if err != nil {
-		return nil, err
-	}
+	//err := service.DefaultManagerSessionService().Invalid(g.MustGet(constant.CtxKeySession).(*service.Session))
+	//if err != nil {
+	//	return nil, err
+	//}
 	g.SetCookieData(&http.Cookie{
 		Name:     constant.HttpCookieManagerToken,
 		Path:     "/",

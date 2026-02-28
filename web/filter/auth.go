@@ -5,9 +5,7 @@ import (
 	"ispace/common/constant"
 	"ispace/common/response"
 	"ispace/web/service"
-	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -55,13 +53,13 @@ func (a *AuthFilter) Serve(c *gin.Context) (any, error) {
 	}
 
 	// session 快到期，续约
-	if session.ExpireAt.Sub(time.Now()) < time.Hour {
-		go func() {
-			if _, err := a.sessionService.Renewal(c.Request.Context(), session); err != nil {
-				slog.ErrorContext(c.Request.Context(), "session renewal error", slog.String("err", err.Error()))
-			}
-		}()
-	}
+	//if session.ExpireAt.Sub(time.Now()) < time.Hour {
+	//	go func() {
+	//		if _, err := a.sessionService.Renewal(c.Request.Context(), session); err != nil {
+	//			slog.ErrorContext(c.Request.Context(), "session renewal error", slog.String("err", err.Error()))
+	//		}
+	//	}()
+	//}
 
 	c.Set(constant.CtxKeySubject, session.Subject)
 	c.Set(constant.CtxKeySession, session)
