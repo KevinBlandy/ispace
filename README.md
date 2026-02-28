@@ -28,3 +28,9 @@
 
 上述配置都有默认值，即示例中的参数。
 
+
+## Build
+
+```shell
+CC=x86_64-linux-musl-gcc CXX=x86_64-linux-musl-g++ GOARCH=amd64 GOOS=linux CGO_ENABLED=1 go build -ldflags "-linkmode external -extldflags -static"
+```

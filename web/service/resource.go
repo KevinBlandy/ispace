@@ -1241,8 +1241,8 @@ func (s *ResourceService) Group(ctx context.Context, request *api.ResourceGroupR
 	groupStatement.WriteString("SELECT " + groupField + " _group FROM t_resource t WHERE t.member_id = ? AND t.dir = ?")
 
 	if request.ContentType != "" {
-		groupStatement.WriteString(" AND t.content_type LIKE ?")
-		groupConditions = append(groupConditions, request.ContentType+"%")
+		groupStatement.WriteString(" AND t.content_type LIKE CONCAT(?, '%')")
+		groupConditions = append(groupConditions, request.ContentType+"/")
 	}
 
 	groupStatement.WriteString(" GROUP BY _group ORDER BY _group DESC")
