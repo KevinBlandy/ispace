@@ -1286,7 +1286,7 @@ func (s *ResourceService) Group(ctx context.Context, request *api.ResourceGroupR
 			`)
 
 	if request.ContentType != "" {
-		itemStatement.WriteString(" AND t.content_type CONCAT(?, '%')")
+		itemStatement.WriteString(" AND t.content_type LIKE CONCAT(?, '%')")
 		itemConditions = append(itemConditions, request.ContentType)
 	}
 	itemStatement.WriteString(" AND " + groupField + " = ?")
