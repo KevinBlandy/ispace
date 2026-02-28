@@ -18,7 +18,7 @@ type Resource struct {
 	Title       string // 资源标题
 	ContentType string // 媒体类型
 	Dir         bool   // 是否是目录
-	Path        string `gorm:"index"` // ID 关系树
+	Path        string `gorm:"uniqueIndex"` // ID 关系树
 	Depth       uint64 // 树深度
 	CreateTime  int64  // 创建时间
 	UpdateTime  int64  // 更新时间

@@ -41,7 +41,7 @@ type Object struct {
 	Id          int64             `gorm:"primaryKey"`
 	Path        string            `gorm:"uniqueIndex"` // 资源在本地的存储路径
 	Compression ObjectCompression // 压缩算法
-	Hash        string            `gorm:"index"` // Sha256 值
+	Hash        string            `gorm:"uniqueIndex"` // Sha256 值
 	Size        int64             // 原始文件大小
 	FileSize    int64             // 实际文件大小
 	RefCount    uint64            // 引用数量
