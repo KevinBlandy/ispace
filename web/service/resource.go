@@ -340,8 +340,14 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 		slog.String("hash", hash),
 	)
 
-	// close & flush
-	if err := writer.Close(); err != nil {
+	// 刷出缓存 flush
+	if compress {
+		if err := writer.Close(); err != nil {
+			return err
+		}
+	}
+
+	if err := newFile.Sync(); err != nil {
 		return err
 	}
 
@@ -360,7 +366,7 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 		Compression: util.If(compress, model.ObjectCompressionGzip, model.ObjectCompressionNone),
 		Hash:        hash,
 		Size:        fileHeader.Size(), // 逻辑大小
-		FileSize:    stat.Size(),
+		FileSize:    stat.Size(),       // 实际大小
 		RefCount:    0,
 		ContentType: contentType,
 		Status:      model.ObjectStatusPendingReview, // 默认待审核状态

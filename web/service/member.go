@@ -185,7 +185,7 @@ func (m *MemberService) Update(ctx context.Context, request *api.MemberUpdateReq
 		if err != nil {
 			return err
 		}
-		updateMap["password"] = password
+		updateMap["password"] = string(password)
 	}
 	if request.Enabled != nil {
 		updateMap["enabled"] = *request.Enabled
