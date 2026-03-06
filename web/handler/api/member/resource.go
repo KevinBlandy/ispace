@@ -38,7 +38,7 @@ type ResourceApi struct {
 	downloadTask         *concurrent.Map[string, chan sse.Event]
 	resourceService      *service.ResourceService
 	resourceChunkService *service.ResourceChunkService
-	chunkedProcess       *concurrent.Map[int64, struct{}]
+	chunkedProcess       *concurrent.Map[int64, chan struct{}]
 }
 
 func NewResourceApi(resourceService *service.ResourceService, resourceChunkService *service.ResourceChunkService) *ResourceApi {
@@ -46,7 +46,7 @@ func NewResourceApi(resourceService *service.ResourceService, resourceChunkServi
 		downloadTask:         concurrent.NewMap[string, chan sse.Event](),
 		resourceService:      resourceService,
 		resourceChunkService: resourceChunkService,
-		chunkedProcess:       concurrent.NewMap[int64, struct{}](),
+		chunkedProcess:       concurrent.NewMap[int64, chan struct{}](),
 	}
 }
 
@@ -715,7 +715,7 @@ func (r ResourceApi) NewChunkedResource(g *gin.Context) (any, error) {
 		return nil, err
 	}
 	request.MemberId = g.GetInt64(constant.CtxKeySubject)
-	request.ParentId, _ = strconv.ParseInt(g.Query("parentId"), 10, 60)
+	request.ParentId, _ = strconv.ParseInt(g.Query("parentId"), 10, 64)
 	if request.ParentId < 1 {
 		request.ParentId = model.DefaultResourceParentId
 	}
@@ -772,28 +772,15 @@ func (r ResourceApi) ChunkedUpload(g *gin.Context) (any, error) {
 	}
 
 	// 并发限制，避免多个进程同时上传同一个资源
-	if _, ok := r.chunkedProcess.LoadOrStore(ret.Id, struct{}{}); ok {
+	ch, ok := r.chunkedProcess.LoadOrStore(ret.Id, make(chan struct{}))
+	if ok {
 		return nil, common.NewServiceError(http.StatusConflict, response.Fail(response.CodeBadRequest).WithMessage("该上传任务已经在进行中"))
 	}
-	defer r.chunkedProcess.Delete(ret.Id)
-
-	// 已落盘的文件大小
-	var received int64
-	stat, err := store.DefaultChunkStore().Stat(ret.Path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
-	if stat != nil {
-		received = stat.Size()
-	}
-
-	// 客户端上传位置是否和服务器一致
-	if received != position {
-		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("上传进度不一致"))
-	}
-
-	// 计算出剩余上传字节数量
-	var remaining = ret.Size - received
+	defer func() {
+		if c, ok := r.chunkedProcess.LoadAndDelete(ret.Id); ok {
+			close(c)
+		}
+	}()
 
 	// 打开文件
 	chunkedFile, err := store.DefaultChunkStore().OpenFile(ret.Path, os.O_CREATE|os.O_RDWR|os.O_APPEND, os.ModePerm)
@@ -802,22 +789,60 @@ func (r ResourceApi) ChunkedUpload(g *gin.Context) (any, error) {
 	}
 	defer util.SafeClose(chunkedFile)
 
-	// IO 到磁盘，保证只写入不超过剩余字节数的数据
-	_, err = io.CopyN(chunkedFile, g.Request.Body, remaining)
-	if err != nil && !errors.Is(err, io.EOF) {
+	stat, err := chunkedFile.Stat()
+	if err != nil {
 		return nil, err
 	}
+
+	var received = stat.Size()
+
+	// 客户端得到的上传进度是否和服务器一致
+	if received != position {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("上传进度不一致"))
+	}
+
+	// 计算出剩余上传字节数量
+	var remaining = ret.Size - received
+
+	// 监听异步的取消事件
+	go func() {
+		select {
+		case <-ch: // 用户手动取消了上传操作，直接中断流
+			_ = g.Request.Body.Close()
+		case <-g.Request.Context().Done(): // 客户端网络异常断开连接
+		}
+	}()
+
+	// IO 到磁盘，保证只写入不超过剩余字节数的数据
+	written, err := io.CopyN(chunkedFile, g.Request.Body, remaining)
+	if err != nil && !errors.Is(err, io.EOF) {
+		slog.ErrorContext(g.Request.Context(), "[断点续传] 上传中断",
+			slog.String("err", err.Error()),
+			slog.Int64("written", written),
+		)
+		return nil, err
+	}
+
+	// 可能是被取消了上传任务
+	if written != remaining {
+		slog.InfoContext(g.Request.Context(), "[断点续传] 上传中断",
+			slog.Int64("written", written),
+		)
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("上传中断"))
+	}
+
 	// 强制刷盘
 	if err := chunkedFile.Sync(); err != nil {
 		return nil, err
 	}
+
 	// 重置指针
 	if _, err := chunkedFile.Seek(0, io.SeekStart); err != nil {
 		return nil, err
 	}
 
 	// 哈希校验
-	// TODO 可以考虑不校验，客户端自己校验，服务端不强制要求上传文件的一致性
+	// TODO 不校验哈希，客户端自己校验，服务端不强制要求上传文件的一致性
 	//hasher := sha256.New()
 	//if _, err := io.Copy(hasher, chunkedFile); err != nil {
 	//	return nil, err
@@ -844,6 +869,32 @@ func (r ResourceApi) ChunkedUpload(g *gin.Context) (any, error) {
 	if err := store.DefaultChunkStore().Remove(ret.Path); err != nil {
 		return nil, err
 	}
+
+	return response.Ok(nil), nil
+}
+
+// ChunkedDelete 取消上传任务
+func (r ResourceApi) ChunkedDelete(g *gin.Context) (any, error) {
+
+	memberId := g.GetInt64(constant.CtxKeySubject)
+	sourceId, _ := strconv.ParseInt(g.Param("id"), 10, 64)
+	if sourceId < 1 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
+	}
+	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*model.ResourceChunk, error) {
+		return r.resourceChunkService.Cancel(ctx, memberId, sourceId)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 通知正在执行上传的任务
+	if ch, ok := r.chunkedProcess.LoadAndDelete(ret.Id); ok {
+		close(ch)
+	}
+
+	// 取消上成功，尝试删除文件
+	_ = store.DefaultChunkStore().Remove(ret.Path)
 
 	return response.Ok(nil), nil
 }

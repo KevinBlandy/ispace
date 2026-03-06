@@ -326,10 +326,10 @@ type MemberResourceStatResponse struct {
 // ChunkedResourceRequest 分片资源上传
 type ChunkedResourceRequest struct {
 	MemberId int64  `json:"-"`
-	ParentId int64  `json:"-"` // 上传到的目录
-	Title    string // 资源标题
-	Sha256   string // 资源 Hash
-	Size     int64  // 资源大小
+	ParentId int64  `json:"-"`      // 上传到的目录
+	Title    string `json:"title"`  // 资源标题
+	Sha256   string `json:"sha256"` // 资源 Hash
+	Size     int64  `json:"size"`   // 资源大小
 }
 
 // ChunkedResourceResponse 资源响应

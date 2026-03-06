@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -66,9 +67,12 @@ func (s ResourceChunkService) ChunkedResource(ctx context.Context, memberId int6
 
 	var ret = make([]*api.ChunkedResourceResponse, len(list))
 
-	for i, v := range list {
-		go func(i int, v *model.ResourceChunk) {
+	var wg = &sync.WaitGroup{}
 
+	for i, v := range list {
+		wg.Add(1)
+		go func(i int, v *model.ResourceChunk) {
+			defer wg.Done()
 			// 文件大小即已接收的字节数量
 			var received int64 = 0
 			stat, _ := store.DefaultChunkStore().Stat(v.Path)
@@ -86,6 +90,8 @@ func (s ResourceChunkService) ChunkedResource(ctx context.Context, memberId int6
 		}(i, v)
 	}
 
+	wg.Wait()
+
 	return ret, nil
 }
 
@@ -100,7 +106,7 @@ func (s ResourceChunkService) UploadComplete(ctx context.Context, chunk *model.R
 	if chunk.ParentId != model.DefaultResourceParentId {
 		parent, err := gorm.G[model.Resource](db.Session(ctx)).
 			Select("id").
-			Where("member_id = AND parent_id = ? AND dir = ?", chunk.MemberId, chunk.ParentId, true).
+			Where("member_id = ? AND id = ? AND dir = ?", chunk.MemberId, chunk.ParentId, true).
 			Take(ctx)
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -117,8 +123,30 @@ func (s ResourceChunkService) UploadComplete(ctx context.Context, chunk *model.R
 	}
 
 	// 删除分片上传记录
-	_, err := gorm.G[model.ResourceChunk](db.Session(ctx)).Where("id = ?", chunk.Id).Delete(ctx)
-	return err
+	affected, err := gorm.G[model.ResourceChunk](db.Session(ctx)).Where("id = ?", chunk.Id).Delete(ctx)
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("上传任务已取消"))
+	}
+	return nil
+}
+
+func (s ResourceChunkService) Cancel(ctx context.Context, memberId int64, sourceId int64) (*model.ResourceChunk, error) {
+	ret, err := s.Find(ctx, memberId, sourceId)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	affected, err := gorm.G[model.ResourceChunk](db.Session(ctx)).Where("id = ? AND member_id = ?", sourceId, memberId).Delete(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if affected == 0 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("上传任务已取消"))
+	}
+	return ret, nil
 }
 
 func NewResourceChunkService(resourceService *ResourceService) *ResourceChunkService {
