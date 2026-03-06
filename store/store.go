@@ -1,11 +1,9 @@
 package store
 
 import (
-	"context"
 	"ispace/common/util"
 	"ispace/config"
 	"ispace/repo/model"
-	"log/slog"
 	"mime"
 	"net/http"
 	"os"
@@ -100,7 +98,15 @@ func New(dir string) (*Store, error) {
 var DefaultStore = sync.OnceValue(func() *Store {
 	store, err := New(*config.StoreDir)
 	if err != nil {
-		slog.ErrorContext(context.Background(), "打开存储目录异常", slog.String("err", err.Error()))
+		panic(err)
+	}
+	return store
+})
+
+// DefaultChunkStore 默认的分片存储目录
+var DefaultChunkStore = sync.OnceValue(func() *Store {
+	store, err := New(*config.ChunkDir)
+	if err != nil {
 		panic(err)
 	}
 	return store

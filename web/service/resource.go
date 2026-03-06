@@ -340,7 +340,8 @@ func (s *ResourceService) Upload(ctx context.Context, memberId int64, parentId i
 		slog.String("hash", hash),
 	)
 
-	// 刷出缓存 flush
+	// 如果是压缩文件，则关闭 writer，这不会关闭其底层的 writer
+	// writer 是有缓存的，如果不强制刷到磁盘，会导致后续读取到的磁盘文件大小不正确。
 	if compress {
 		if err := writer.Close(); err != nil {
 			return err

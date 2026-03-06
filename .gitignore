@@ -3,6 +3,7 @@
 /public
 /database
 /storage
+/chunk
 .claude
 
 web/resource/public/*

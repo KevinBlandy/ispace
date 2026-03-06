@@ -13,6 +13,7 @@ import (
 var LogDir *string
 var PublicDir *string
 var StoreDir *string
+var ChunkDir *string
 
 var HttpPort *int
 var HttpHost *string
@@ -48,6 +49,7 @@ func Initialization(args []string) error {
 	LogDir = flagSet.String("log.dir", "logs", "日志输出目录")
 	PublicDir = flagSet.String("public.dir", "public", "公共资源目录")
 	StoreDir = flagSet.String("store.dir", "storage", "文件资源存储目录")
+	ChunkDir = flagSet.String("chunk.dir", "chunk", "分片上传资源暂存目录")
 
 	// ==========================
 	// HTTP

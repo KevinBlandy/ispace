@@ -322,3 +322,21 @@ type MemberResourceStatResponse struct {
 	UsedStorageSpace int64 `json:"usedStorageSpace"` // 已使用的存储空间
 	MaxStorageSpace  int64 `json:"maxStorageSpace"`  // 最多可使用的空间
 }
+
+// ChunkedResourceRequest 分片资源上传
+type ChunkedResourceRequest struct {
+	MemberId int64  `json:"-"`
+	ParentId int64  `json:"-"` // 上传到的目录
+	Title    string // 资源标题
+	Sha256   string // 资源 Hash
+	Size     int64  // 资源大小
+}
+
+// ChunkedResourceResponse 资源响应
+type ChunkedResourceResponse struct {
+	Id       int64  `json:"id,string"` // 任务 ID
+	Title    string `json:"title"`     // 文件标题
+	Size     int64  `json:"size"`      // 文件大小
+	Sha256   string `json:"sha256"`    // 哈希值
+	Received int64  `json:"received"`  // 已收到的大小
+}

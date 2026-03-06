@@ -35,12 +35,18 @@ import (
 )
 
 type ResourceApi struct {
-	downloadTask *concurrent.Map[string, chan sse.Event]
+	downloadTask         *concurrent.Map[string, chan sse.Event]
+	resourceService      *service.ResourceService
+	resourceChunkService *service.ResourceChunkService
+	chunkedProcess       *concurrent.Map[int64, struct{}]
 }
 
-func NewResourceApi() *ResourceApi {
+func NewResourceApi(resourceService *service.ResourceService, resourceChunkService *service.ResourceChunkService) *ResourceApi {
 	return &ResourceApi{
-		downloadTask: concurrent.NewMap[string, chan sse.Event](),
+		downloadTask:         concurrent.NewMap[string, chan sse.Event](),
+		resourceService:      resourceService,
+		resourceChunkService: resourceChunkService,
+		chunkedProcess:       concurrent.NewMap[int64, struct{}](),
 	}
 }
 
@@ -48,7 +54,7 @@ func NewResourceApi() *ResourceApi {
 func (r ResourceApi) Tree(ctx *gin.Context) (any, error) {
 	memberId := ctx.GetInt64(constant.CtxKeySubject)
 	result, err := db.Transaction(ctx.Request.Context(), func(ctx context.Context) ([]*api.ResourceTreeResponse, error) {
-		return service.DefaultResourceService.Tree(ctx, memberId)
+		return r.resourceService.Tree(ctx, memberId)
 	}, db.TxReadOnly)
 	if err != nil {
 		return nil, err
@@ -70,7 +76,7 @@ func (r ResourceApi) List(ctx *gin.Context) (any, error) {
 	}
 
 	result, err := db.Transaction(ctx.Request.Context(), func(ctx context.Context) ([]*api.ResourceListResponse, error) {
-		return service.DefaultResourceService.List(ctx, request)
+		return r.resourceService.List(ctx, request)
 	}, db.TxReadOnly)
 	if err != nil {
 		return nil, err
@@ -107,7 +113,7 @@ func (r ResourceApi) Upload(ctx *gin.Context) (any, error) {
 	for _, files := range multipartForm.File {
 		for _, file := range files {
 			_, err = db.Transaction(ctx.Request.Context(), func(ctx context.Context) (any, error) {
-				return nil, service.DefaultResourceService.UploadMultipart(ctx, memberId, parentId, file)
+				return nil, r.resourceService.UploadMultipart(ctx, memberId, parentId, file)
 			})
 			if err != nil {
 				return nil, err
@@ -135,7 +141,7 @@ func (r ResourceApi) Content(ctx *gin.Context) (any, error) {
 		Status      model.ObjectStatus
 		Path        string
 	}, error) {
-		return service.DefaultResourceService.Get(ctx, memberId, resourceId)
+		return r.resourceService.Get(ctx, memberId, resourceId)
 	}, db.TxReadOnly)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
@@ -175,7 +181,7 @@ func (r ResourceApi) MkDir(ctx *gin.Context) (any, error) {
 	}
 
 	err := db.TransactionWithOutResult(ctx.Request.Context(), func(ctx context.Context) error {
-		return service.DefaultResourceService.Mkdir(ctx, request)
+		return r.resourceService.Mkdir(ctx, request)
 	})
 	if err != nil {
 		return nil, err
@@ -198,7 +204,7 @@ func (r ResourceApi) Rename(ctx *gin.Context) (any, error) {
 		return nil, err
 	}
 	err = db.TransactionWithOutResult(ctx.Request.Context(), func(ctx context.Context) error {
-		return service.DefaultResourceService.Rename(ctx, request)
+		return r.resourceService.Rename(ctx, request)
 	})
 	if err != nil {
 		return nil, err
@@ -215,7 +221,7 @@ func (r ResourceApi) Delete(ctx *gin.Context) (any, error) {
 		return nil, err
 	}
 	err := db.TransactionWithOutResult(ctx.Request.Context(), func(ctx context.Context) error {
-		return service.DefaultResourceService.MoveToRecycleBin(ctx, request)
+		return r.resourceService.MoveToRecycleBin(ctx, request)
 	})
 	if err != nil {
 		return nil, err
@@ -239,7 +245,7 @@ func (r ResourceApi) Move(ctx *gin.Context) (any, error) {
 	}
 
 	err := db.TransactionWithOutResult(ctx.Request.Context(), func(ctx context.Context) error {
-		return service.DefaultResourceService.Move(ctx, request)
+		return r.resourceService.Move(ctx, request)
 	})
 	if err != nil {
 		return nil, err
@@ -333,7 +339,7 @@ func (r ResourceApi) UploadDir(c *gin.Context) (any, error) {
 	}
 
 	err = db.TransactionWithOutResult(c.Request.Context(), func(ctx context.Context) error {
-		return service.DefaultResourceService.UploadDir(ctx, memberId, parentId, dirs)
+		return r.resourceService.UploadDir(ctx, memberId, parentId, dirs)
 	})
 	if err != nil {
 		return nil, err
@@ -353,7 +359,7 @@ func (r ResourceApi) UploadFlash(g *gin.Context) (any, error) {
 		parentId = model.DefaultResourceParentId
 	}
 	err = db.TransactionWithOutResult(g.Request.Context(), func(ctx context.Context) error {
-		return service.DefaultResourceService.FlashUpload(ctx, request, memberId, parentId)
+		return r.resourceService.FlashUpload(ctx, request, memberId, parentId)
 	})
 	if err != nil {
 		return nil, err
@@ -376,7 +382,7 @@ func (r ResourceApi) Download(g *gin.Context) (any, error) {
 
 	// 检索树形结构
 	tree, err := db.Transaction(g.Request.Context(), func(ctx context.Context) ([]*store.DownloadTree, error) {
-		return service.DefaultResourceService.Download(ctx, g.GetInt64(constant.CtxKeySubject), resourceIds)
+		return r.resourceService.Download(ctx, g.GetInt64(constant.CtxKeySubject), resourceIds)
 	})
 
 	if err != nil {
@@ -409,7 +415,7 @@ func (r ResourceApi) Unarchive(g *gin.Context) (any, error) {
 		Status      model.ObjectStatus
 		Path        string
 	}, error) {
-		return service.DefaultResourceService.Get(ctx, g.GetInt64(constant.CtxKeySubject), resourceId)
+		return r.resourceService.Get(ctx, g.GetInt64(constant.CtxKeySubject), resourceId)
 	}, db.TxReadOnly)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -572,7 +578,7 @@ func (r ResourceApi) UploadGet(g *gin.Context) (any, error) {
 		}
 
 		err = db.TransactionWithOutResult(context.Background(), func(ctx context.Context) error {
-			return service.DefaultResourceService.Upload(ctx, memberId, parentId, service.NewLocalFileResource(stat.Size(), fileName, tmpFile))
+			return r.resourceService.Upload(ctx, memberId, parentId, service.NewLocalFileResource(stat.Size(), fileName, tmpFile))
 		})
 		if err != nil {
 			push(sse.Event{Event: "error", Data: err.Error()})
@@ -630,7 +636,7 @@ func (r ResourceApi) Search(g *gin.Context) (any, error) {
 	}
 
 	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*page.Pagination[*api.ResourceSearchResponse], error) {
-		return service.DefaultResourceService.Search(ctx, request)
+		return r.resourceService.Search(ctx, request)
 	})
 	if err != nil {
 		return nil, err
@@ -647,7 +653,7 @@ func (r ResourceApi) Recent(g *gin.Context) (any, error) {
 	request.ContentType = g.Query("contentType")
 
 	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (any, error) {
-		return service.DefaultResourceService.Recent(ctx, request)
+		return r.resourceService.Recent(ctx, request)
 	})
 	if err != nil {
 		return nil, err
@@ -665,7 +671,7 @@ func (r ResourceApi) Group(g *gin.Context) (any, error) {
 	request.Group = g.Query("group")
 
 	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (any, error) {
-		return service.DefaultResourceService.Group(ctx, request)
+		return r.resourceService.Group(ctx, request)
 	})
 	if err != nil {
 		return nil, err
@@ -682,7 +688,7 @@ func (r ResourceApi) Share(g *gin.Context) (any, error) {
 		return nil, err
 	}
 	result, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (any, error) {
-		return service.DefaultResourceService.Share(ctx, request)
+		return r.resourceService.Share(ctx, request)
 	})
 	if err != nil {
 		return nil, err
@@ -691,11 +697,10 @@ func (r ResourceApi) Share(g *gin.Context) (any, error) {
 }
 
 // Stat 资源统计
-// TODO 待优化，单独统计表，空间换时间
 func (r ResourceApi) Stat(g *gin.Context) (any, error) {
 	memberId := g.GetInt64(constant.CtxKeySubject)
 	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*api.MemberResourceStatResponse, error) {
-		return service.DefaultResourceService.TotalSize(ctx, memberId)
+		return r.resourceService.TotalSize(ctx, memberId)
 	}, db.TxReadOnly)
 	if err != nil {
 		return nil, err
@@ -703,6 +708,146 @@ func (r ResourceApi) Stat(g *gin.Context) (any, error) {
 	return response.Ok(ret), nil
 }
 
+// NewChunkedResource 初始化分片续传
+func (r ResourceApi) NewChunkedResource(g *gin.Context) (any, error) {
+	var request = new(api.ChunkedResourceRequest)
+	if err := g.ShouldBindJSON(request); err != nil {
+		return nil, err
+	}
+	request.MemberId = g.GetInt64(constant.CtxKeySubject)
+	request.ParentId, _ = strconv.ParseInt(g.Query("parentId"), 10, 60)
+	if request.ParentId < 1 {
+		request.ParentId = model.DefaultResourceParentId
+	}
+
+	// 初始化上传信息
+	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*api.ChunkedResourceResponse, error) {
+		return r.resourceChunkService.NewChunkedResource(ctx, request)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(ret), nil
+}
+
+// ChunkedResource 上传任务列表
+func (r ResourceApi) ChunkedResource(g *gin.Context) (any, error) {
+	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) ([]*api.ChunkedResourceResponse, error) {
+		return r.resourceChunkService.ChunkedResource(ctx, g.GetInt64(constant.CtxKeySubject))
+	}, db.TxReadOnly)
+	if err != nil {
+		return nil, err
+	}
+	return response.Ok(ret), nil
+}
+
+// ChunkedUpload 执行上传任务
+func (r ResourceApi) ChunkedUpload(g *gin.Context) (any, error) {
+
+	defer util.SafeClose(g.Request.Body)
+
+	memberId := g.GetInt64(constant.CtxKeySubject)
+
+	// 资源 ID
+	sourceId, _ := strconv.ParseInt(g.Param("id"), 10, 64)
+	if sourceId < 1 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
+	}
+	// 客户端是从什么位置开始上传的
+	position, _ := strconv.ParseInt(g.Query("position"), 10, 64)
+	if position < 0 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
+	}
+
+	// 检索上传的信息
+	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*model.ResourceChunk, error) {
+		return r.resourceChunkService.Find(ctx, memberId, sourceId)
+	}, db.TxReadOnly)
+
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if ret.Id < 1 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("上传任务不存在"))
+	}
+
+	// 并发限制，避免多个进程同时上传同一个资源
+	if _, ok := r.chunkedProcess.LoadOrStore(ret.Id, struct{}{}); ok {
+		return nil, common.NewServiceError(http.StatusConflict, response.Fail(response.CodeBadRequest).WithMessage("该上传任务已经在进行中"))
+	}
+	defer r.chunkedProcess.Delete(ret.Id)
+
+	// 已落盘的文件大小
+	var received int64
+	stat, err := store.DefaultChunkStore().Stat(ret.Path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if stat != nil {
+		received = stat.Size()
+	}
+
+	// 客户端上传位置是否和服务器一致
+	if received != position {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("上传进度不一致"))
+	}
+
+	// 计算出剩余上传字节数量
+	var remaining = ret.Size - received
+
+	// 打开文件
+	chunkedFile, err := store.DefaultChunkStore().OpenFile(ret.Path, os.O_CREATE|os.O_RDWR|os.O_APPEND, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
+	defer util.SafeClose(chunkedFile)
+
+	// IO 到磁盘，保证只写入不超过剩余字节数的数据
+	_, err = io.CopyN(chunkedFile, g.Request.Body, remaining)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	// 强制刷盘
+	if err := chunkedFile.Sync(); err != nil {
+		return nil, err
+	}
+	// 重置指针
+	if _, err := chunkedFile.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	// 哈希校验
+	// TODO 可以考虑不校验，客户端自己校验，服务端不强制要求上传文件的一致性
+	//hasher := sha256.New()
+	//if _, err := io.Copy(hasher, chunkedFile); err != nil {
+	//	return nil, err
+	//}
+	//fileHash := hex.EncodeToString(hasher.Sum(nil))
+	//if strings.EqualFold(fileHash, ret.Sha256) {
+	//	return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("文件指纹不一致"))
+	//}
+	//// 重置指针
+	//if _, err := chunkedFile.Seek(0, io.SeekStart); err != nil {
+	//	return nil, err
+	//}
+
+	//  执行上传逻辑
+	err = db.TransactionWithOutResult(g.Request.Context(), func(ctx context.Context) error {
+		return r.resourceChunkService.UploadComplete(ctx, ret, service.NewLocalFileResource(ret.Size, ret.Title, chunkedFile))
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 上传成功，删除本地文件
+	if err := store.DefaultChunkStore().Remove(ret.Path); err != nil {
+		return nil, err
+	}
+
+	return response.Ok(nil), nil
+}
+
 var DefaultResourceApi = sync.OnceValue(func() *ResourceApi {
-	return NewResourceApi()
+	return NewResourceApi(service.DefaultResourceService, service.DefaultResourceChunkService)
 })

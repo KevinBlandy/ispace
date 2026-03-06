@@ -17,6 +17,7 @@ func Initialization() error {
 		&model.Member{},
 		&model.Object{},
 		&model.Resource{},
+		&model.ResourceChunk{},
 		&model.Share{},
 		&model.ShareResource{},
 		&model.RecycleBin{},

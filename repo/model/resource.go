@@ -27,3 +27,18 @@ type Resource struct {
 func (Resource) TableName() string {
 	return "t_resource"
 }
+
+type ResourceChunk struct {
+	Id         int64  `gorm:"primaryKey"` // ID
+	ParentId   int64  // 要上传到的目录 ID
+	MemberId   int64  `gorm:"index"` // 会员 ID
+	Title      string // 文件标题
+	Size       int64  // 文件大小
+	Sha256     string // 文件 Hash
+	Path       string // 本地磁盘路径
+	CreateTime int64  // 任务创建时间
+}
+
+func (ResourceChunk) TableName() string {
+	return "t_resource_chunk"
+}
