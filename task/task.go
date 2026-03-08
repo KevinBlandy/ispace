@@ -19,6 +19,10 @@ func Initialization() (func(), error) {
 	if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewInvalidObjectCleaner(service.DefaultObjectService)); err != nil {
 		return func() {}, nil
 	}
+	// 每小时执行一次失效的分片文件清理
+	if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewChunkedResourceCleaner(service.DefaultResourceChunkService)); err != nil {
+		return func() {}, nil
+	}
 	//  每分钟执行一次回收站过期文件清理
 	if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewRecycleBinCleaner(service.DefaultRecycleBinService)); err != nil {
 		return func() {}, nil
