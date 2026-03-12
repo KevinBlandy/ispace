@@ -98,6 +98,7 @@ func New(publicFs ...http.FileSystem) http.Handler {
 		memberApi.POST("/resources/share", H(member.DefaultResourceApi().Share))                                             // 资源分享
 		memberApi.POST("/resources/upload/chunked", H(member.DefaultResourceApi().NewChunkedResource))                       // 初始化断点续传任务
 		memberApi.GET("/resources/upload/chunked", H(member.DefaultResourceApi().ChunkedResource))                           // 检索断点续传任务列表
+		memberApi.GET("/resources/upload/chunked/:id", H(member.DefaultResourceApi().ChunkedResourceDetail))                 // 查询任务详情
 		memberApi.DELETE("/resources/upload/chunked/:id", H(member.DefaultResourceApi().ChunkedDelete))                      // 取消上传任务
 		memberApi.POST("/resources/upload/chunked/:id", H(member.DefaultResourceApi().ChunkedUpload))                        // 执行续传任务
 	}

@@ -820,7 +820,7 @@ func (r ResourceApi) ChunkedUpload(g *gin.Context) (any, error) {
 			slog.String("err", err.Error()),
 			slog.Int64("written", written),
 		)
-		return nil, err
+		return response.Ok(ret), nil
 	}
 
 	// 可能是被取消了上传任务
@@ -828,7 +828,7 @@ func (r ResourceApi) ChunkedUpload(g *gin.Context) (any, error) {
 		slog.InfoContext(g.Request.Context(), "[断点续传] 上传中断",
 			slog.Int64("written", written),
 		)
-		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("上传中断"))
+		return response.Ok(ret), nil
 	}
 
 	// 强制刷盘
@@ -897,6 +897,37 @@ func (r ResourceApi) ChunkedDelete(g *gin.Context) (any, error) {
 	_ = store.DefaultChunkStore().Remove(ret.Path)
 
 	return response.Ok(nil), nil
+}
+
+func (r ResourceApi) ChunkedResourceDetail(g *gin.Context) (any, error) {
+	memberId := g.GetInt64(constant.CtxKeySubject)
+	sourceId, _ := strconv.ParseInt(g.Param("id"), 10, 64)
+	if sourceId < 1 {
+		return nil, common.NewServiceError(http.StatusBadRequest, response.Fail(response.CodeBadRequest).WithMessage("非法请求"))
+	}
+	ret, err := db.Transaction(g.Request.Context(), func(ctx context.Context) (*model.ResourceChunk, error) {
+		return r.resourceChunkService.Find(ctx, memberId, sourceId)
+	})
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if ret.Id < 1 {
+		return nil, common.NewServiceError(http.StatusNotFound, response.Fail(response.CodeNotFound).WithMessage("资源不存在"))
+	}
+
+	// 文件大小即已接收的字节数量
+	var received int64 = 0
+	stat, _ := store.DefaultChunkStore().Stat(ret.Path)
+	if stat != nil {
+		received = stat.Size()
+	}
+	return response.Ok(&api.ChunkedResourceResponse{
+		Id:       ret.Id,
+		Title:    ret.Title,
+		Size:     ret.Size,
+		Sha256:   ret.Sha256,
+		Received: received,
+	}), nil
 }
 
 var DefaultResourceApi = sync.OnceValue(func() *ResourceApi {
