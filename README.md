@@ -47,3 +47,14 @@
 ```shell
 CC=x86_64-linux-musl-gcc CXX=x86_64-linux-musl-g++ GOARCH=amd64 GOOS=linux CGO_ENABLED=1 go build -ldflags "-linkmode external -extldflags -static"
 ```
+
+
+## 网关
+
+```nginx
+# 会把客户端数据实时流式转发给后端，后端才能边接收边写盘，received 才会正确递增
+proxy_request_buffering off;
+# 不限制客户端请求体大小
+client_max_body_size 0;
+```
+
