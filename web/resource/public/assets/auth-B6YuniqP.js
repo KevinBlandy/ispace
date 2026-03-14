@@ -1,0 +1,1 @@
+import{b7 as n}from"./index-BbupyAJS.js";function s(a,t,e){return n.post(`/manager-api/sign-in?captchaId=${a}&captcha=${encodeURIComponent(t)}`,e)}function i(){return n.post("/manager-api/sign-out")}export{i as a,s};
