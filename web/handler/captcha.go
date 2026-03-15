@@ -30,7 +30,7 @@ func (c *Captcha) Serve(ctx *gin.Context) {
 
 	// 生成验证码图片
 	image, err := captcha.New(150, 50, func(options *captcha.Options) {
-		options.TextLength = 2  // 字符长度 4
+		options.TextLength = 4  // 字符长度 4
 		options.CurveNumber = 2 // 干扰线数量 4
 	})
 	if err != nil {

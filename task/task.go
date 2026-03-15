@@ -15,19 +15,19 @@ func Initialization() (func(), error) {
 		cron.WithChain(cron.SkipIfStillRunning(cron.DiscardLogger)), // 当前任务执行时间超过了间隔时间，当前任务执行完毕后，等待间隔时间后，执行下次任务。
 	)
 
-	// 每小时执行一次失效文件清理
+	// 定期执行一次失效文件清理
 	if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewInvalidObjectCleaner(service.DefaultObjectService)); err != nil {
 		return func() {}, nil
 	}
-	// 每小时执行一次失效的分片文件清理
+	// 定期执行一次失效的分片文件清理
 	if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewChunkedResourceCleaner(service.DefaultResourceChunkService)); err != nil {
 		return func() {}, nil
 	}
-	//  每分钟执行一次回收站过期文件清理
+	//  定期执行一次回收站过期文件清理
 	if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewRecycleBinCleaner(service.DefaultRecycleBinService)); err != nil {
 		return func() {}, nil
 	}
-	//  每分钟执行一次过期分享清理
+	//  定期执行一次过期分享清理
 	if _, err := scheduler.AddJob("0 1/1 * * * ? ", job.NewShareCleaner(service.DefaultShareService)); err != nil {
 		return func() {}, nil
 	}
