@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+// TODO 参数校验
+
 // MemberSignInRequest 登录
 type MemberSignInRequest struct {
 	Account  string `json:"account"`

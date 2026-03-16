@@ -13,9 +13,9 @@
 * 物理文件和逻辑文件分离，通过 hash 实现秒传。
 * 符合条件的文件存储使用 Gzip 压缩，节省空间。
 * 通过断点续传实现大文件上传。
-* 异步下载远程资源，并且通过 SSE 监控下载进度。
+* 支持异步下载远程资源，并且通过 SSE 监控下载进度。
 * 支持 Range 协商，客户端实现断点下载。
-* 支付文件分享。
+* 支持文件分享。
 * 前后端分离，但通过 Embed 嵌入进整个客户端，不需要单独部署前端项目。
 * 独立的可执行文件，不依赖任何第三方的服务，使用 SQLite 数据库，JWT，部署即可用。
 
@@ -44,14 +44,6 @@
 * `http.host` http 服务主机
 
 上述配置都有默认值，即示例中的参数。
-
-
-## 编译
-
-```shell
-CC=x86_64-linux-musl-gcc CXX=x86_64-linux-musl-g++ GOARCH=amd64 GOOS=linux CGO_ENABLED=1 go build -ldflags "-linkmode external -extldflags -static"
-```
-
 
 ## 网关相关的一些配置
 
