@@ -46,8 +46,11 @@ func (s *Store) Open(name string) (*os.File, error) {
 // OpenFile 创建文件，如果目录不存在会先创建目录
 func (s *Store) OpenFile(name string, flag int, perm os.FileMode) (*os.File, error) {
 	name = filepath.FromSlash(name)
-	if err := s.MkdirAll(filepath.Dir(name), perm); err != nil && !os.IsExist(err) {
-		return nil, err
+	if flag&os.O_CREATE != 0 {
+		// 设置了 create 标志的时候，才尝试强制创建上级目录
+		if err := s.MkdirAll(filepath.Dir(name), perm); err != nil && !os.IsExist(err) {
+			return nil, err
+		}
 	}
 	return s.Root.OpenFile(name, flag, perm)
 }
